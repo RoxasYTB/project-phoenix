@@ -242,6 +242,9 @@ async fn run(
                 return Ok(());
             }
             Exit::Closed(code, reason) => {
+                if m.state() == State::Connected {
+                    attempts = 0;
+                }
                 attempts += 1;
                 if m.on_close(code) && attempts <= policy.max_attempts {
                     let _ = events.send(GatewayEvent::Reconnecting { code });

@@ -223,3 +223,59 @@ async fn go_live_stream_ops_against_the_mock_gateway() {
     h.video(&state.start(1280, 720, 30, 2_500_000).unwrap()).unwrap();
     server.await.unwrap();
 }
+
+#[tokio::test]
+async fn each_successful_resume_restores_the_reconnect_budget() {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let server = tokio::spawn(async move {
+        for round in 0..4 {
+            let (s, _) = listener.accept().await.unwrap();
+            let mut ws = tokio_tungstenite::accept_async(s).await.unwrap();
+            ws.send(Message::Text(r#"{"op":8,"d":{"heartbeat_interval":10000}}"#.into())).await.unwrap();
+            let (op, _) = op_of(&ws.next().await.unwrap().unwrap()).unwrap();
+            if round == 0 {
+                assert_eq!(op, 0);
+                ws.send(Message::Text(r#"{"op":2,"seq":1,"d":{"ssrc":11,"ip":"127.0.0.1","port":4000,"modes":["aead_aes256_gcm_rtpsize"],"streams":[]}}"#.into())).await.unwrap();
+            } else {
+                assert_eq!(op, 7);
+                ws.send(Message::Text(r#"{"op":9,"d":null}"#.into())).await.unwrap();
+            }
+            if round < 3 {
+                ws.close(Some(CloseFrame { code: CloseCode::Library(4015), reason: "server crashed".into() })).await.unwrap();
+                while let Some(Ok(_)) = ws.next().await {}
+            } else {
+                while let Some(Ok(m)) = ws.next().await {
+                    if let Message::Close(_) = m {
+                        break;
+                    }
+                }
+            }
+        }
+    });
+    let info = VoiceConnectInfo {
+        endpoint: "unused".into(),
+        server_id: "1".into(),
+        user_id: "2".into(),
+        session_id: "sess".into(),
+        token: "tok".into(),
+        max_dave_protocol_version: 0,
+        stream: false,
+    };
+    let (h, mut rx, task) = gateway::spawn(
+        info,
+        Some(format!("ws://{addr}")),
+        ReconnectPolicy { max_attempts: 1, backoff: Duration::from_millis(10), ..ReconnectPolicy::default() },
+    );
+    let mut resumed = 0;
+    while resumed < 3 {
+        match next_event(&mut rx).await {
+            GatewayEvent::Message(ServerMessage::Resumed) => resumed += 1,
+            GatewayEvent::Message(_) | GatewayEvent::Reconnecting { .. } => {}
+            e => panic!("unexpected {e:?}"),
+        }
+    }
+    h.close().unwrap();
+    assert!(task.await.unwrap().is_ok());
+    server.await.unwrap();
+}
