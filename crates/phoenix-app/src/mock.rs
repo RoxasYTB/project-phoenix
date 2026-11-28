@@ -1029,7 +1029,7 @@ impl Backend for MockBackend {
     }
 
     fn guild_tag(&self, guild: Id) -> Option<(String, Option<String>)> {
-        (guild == DEMO_TAG_GUILD).then(|| ("PHX".to_owned(), None))
+        (guild == DEMO_TAG_GUILD).then(|| (crate::demo_media::SERVER_TAG.to_owned(), Some(crate::demo_media::SERVER_TAG_BADGE.to_owned())))
     }
 
     fn load_pins(&self, channel: Id) -> BoxFuture<Vec<Message>> {
@@ -1161,7 +1161,7 @@ impl Backend for MockBackend {
             let (name, tag, desc, members, online, color) = if let Some(g) = g {
                 (
                     g.name.to_string(),
-                    Some("PHX".to_owned()),
+                    Some(crate::demo_media::SERVER_TAG.to_owned()),
                     "A native Rust + GPUI Discord client community.".to_owned(),
                     g.member_count.unwrap_or(1_240) as u64,
                     312,
@@ -1170,7 +1170,7 @@ impl Backend for MockBackend {
             } else {
                 let p = NAMES.iter().find(|p| p.tag.is_some_and(|t| t.0 == guild.0));
                 let tag_str = p.and_then(|p| p.tag).map(|t| t.1.to_owned()).unwrap_or_else(|| "TAG".to_owned());
-                let badge_str = p.and_then(|p| p.tag).map(|t| t.2.to_owned());
+                let badge_str = Some(p.and_then(|p| p.tag).map_or(crate::demo_media::SERVER_TAG_BADGE, |t| t.2).to_owned());
                 return Ok(GuildProfile {
                     id: guild,
                     name: format!("{tag_str} Community"),
@@ -1193,6 +1193,7 @@ impl Backend for MockBackend {
                 member_count: members,
                 online_count: online,
                 description: desc,
+                badge_hash: tag.as_ref().map(|_| crate::demo_media::SERVER_TAG_BADGE.to_owned()),
                 tag,
                 traits: vec![tr("Rust", "🦀"), tr("GPUI", "⚡"), tr("Open source", "📦")],
                 brand_color_primary: color,
@@ -1207,6 +1208,36 @@ impl Backend for MockBackend {
 mod tests {
     use super::*;
     use crate::ui::settings::{SettingsPatch, synced_map};
+
+    #[test]
+    fn every_demo_tag_has_a_badge() {
+        for i in 0..NAMES.len() * 2 {
+            let u = user(i);
+            if let Some((tag, badge)) = &u.tag {
+                assert!(badge.as_ref().is_some_and(|b| !b.is_empty()), "demo user {} shows tag {tag} without a badge", u.name);
+                assert!(u.tag_guild.is_some(), "demo user {} has a tag without a guild", u.name);
+            }
+        }
+        let b = MockBackend::new();
+        let guilds: Vec<Id> = b.inner.lock().unwrap().guilds.iter().map(|g| g.id).chain([DEMO_TAG_GUILD, Id(424242)]).collect();
+        for g in guilds {
+            if let Some((tag, badge)) = b.guild_tag(g) {
+                assert!(badge.is_some_and(|b| !b.is_empty()), "demo guild {} has tag {tag} without a badge", g.0);
+            }
+            let prof = futures::executor::block_on(b.guild_profile(g)).unwrap();
+            if let Some(tag) = &prof.tag {
+                assert!(prof.badge_hash.as_ref().is_some_and(|h| !h.is_empty()), "demo guild profile {} has tag {tag} without a badge", g.0);
+            }
+        }
+        assert!(b.guild_tag(DEMO_TAG_GUILD).is_some());
+    }
+
+    #[test]
+    fn demo_server_badge_resolves_to_a_real_cdn_badge() {
+        let fake = crate::ui::modals::guild_tag::badge_url(DEMO_TAG_GUILD, crate::demo_media::SERVER_TAG_BADGE, 32);
+        assert_eq!(crate::demo_media::alias(&fake), Some(crate::demo_media::server_badge_url(32)));
+        assert_eq!(crate::demo_media::alias(&crate::demo_media::server_badge_url(16)), None);
+    }
 
     #[test]
     fn settings_writes_apply_offline() {
