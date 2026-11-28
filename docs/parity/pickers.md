@@ -165,3 +165,4 @@ Client JS: `web.b63d846b329d6470.js` module 5990 (eligible tokens), 902008 (guil
 | burst picker ring | CSS 381575 `isBurstReactionPicker_-sZhZn` | box-shadow 0 0 0 2px --background-brand, plus a 100px --background-brand glow at .5 | ui/pickers/mod.rs render_picker | ✅ |
 | burst search placeholder | `defaultSearchPlaceholder: wT(intention, isBurst)` | not located in the cached bundle | — | ❌ |
 
+- ✅ Sticker cell hover/inspected (28/11): only `.inspectedIndicator` gets `--interactive-background-selected` (radius 12). The 2px `--interactive-text-hover` ring is `.keyboard-mode .stickerInspected_5z8c5P:before` (css-live 254929.e768357ce5775824.css), so it never shows on mouse hover. Phoenix has no keyboard navigation in the sticker tab, so the ring is not drawn.
