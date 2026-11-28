@@ -609,6 +609,10 @@ pub fn char_count(premium: bool, len: i64) -> (i64, bool) {
     (remaining, remaining <= max / 10 || (premium && len > 2000 && remaining >= 0))
 }
 
+pub fn too_long(premium: bool, text: &str) -> bool {
+    char_count(premium, text.chars().count() as i64).0 < 0
+}
+
 fn should_show_send_button(enabled: bool, blocked: bool) -> bool {
     enabled && !blocked
 }
@@ -851,7 +855,7 @@ pub(super) fn text_pad_y() -> f32 {
 
 #[cfg(test)]
 mod tests {
-    use super::{char_count, dot_frame, dot_timing, format_cooldown, should_show_send_button, slowmode_tip};
+    use super::{char_count, dot_frame, dot_timing, format_cooldown, should_show_send_button, slowmode_tip, too_long};
 
     #[test]
     fn send_button_requires_enabled_nonempty_sendable_draft() {
@@ -886,6 +890,18 @@ mod tests {
         assert_eq!(char_count(true, 2000), (2000, false));
         assert_eq!(char_count(true, 2001), (1999, true));
         assert_eq!(char_count(true, 3600), (400, true));
+    }
+
+    #[test]
+    fn send_limit_counts_characters() {
+        assert!(!too_long(false, &"a".repeat(2000)));
+        assert!(too_long(false, &"a".repeat(2001)));
+        assert!(!too_long(false, &"я".repeat(2000)));
+        assert!(!too_long(false, &"字".repeat(2000)));
+        assert!(too_long(false, &"字".repeat(2001)));
+        assert!(!too_long(true, &"a".repeat(4000)));
+        assert!(too_long(true, &"a".repeat(4001)));
+        assert!(!too_long(true, &"я".repeat(4000)));
     }
 
     #[test]
