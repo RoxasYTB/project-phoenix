@@ -513,8 +513,24 @@ pub(crate) fn info<'a>(app: &'a PhoenixApp, uid: Id, guild: Option<Id>) -> Info<
     Info { user: user_cow, prof, presence, acts, custom, display, username, accent, roles }
 }
 
-pub(crate) fn banner(i: &Info, h: f32, radius: f32) -> Div {
-    div()
+pub(crate) fn banner_animates(only_hover: bool, gif_autoplay: bool, hovered: bool, focused: bool) -> bool {
+    if only_hover || !gif_autoplay { hovered } else { focused }
+}
+
+pub(crate) fn banner(i: &Info, h: f32, radius: f32) -> gpui::Stateful<Div> {
+    banner_gated(i, h, radius, false)
+}
+
+pub(crate) fn banner_gated(i: &Info, h: f32, radius: f32, only_hover: bool) -> gpui::Stateful<Div> {
+    let src = i.prof.and_then(|p| p.banner.clone());
+    let k = crate::ui::states::key(("profile-banner", src.as_deref().unwrap_or_default()));
+    let plays = banner_animates(
+        only_hover,
+        crate::ui::settings::effects::gif_autoplay(),
+        crate::ui::states::hovered(k),
+        crate::media::emoji::window_focused(),
+    );
+    crate::ui::states::track(div().id(("profile-banner", k)), k)
         .h(z(h))
         .w_full()
         .flex_none()
@@ -523,8 +539,9 @@ pub(crate) fn banner(i: &Info, h: f32, radius: f32) -> Div {
         .overflow_hidden()
         .border_b_1()
         .border_color(c(tok(idx::BORDER_MUTED)))
-        .when_some(i.prof.and_then(|p| p.banner.clone()), |d, b| {
-            d.child(img(b.clone()).id(crate::media::anim_id(&b)).w_full().h(z(h)).rounded_t(z(radius)))
+        .when_some(src, |d, b| {
+            let shown = if plays || !crate::media::is_animated(&b) { b.clone() } else { crate::media::static_variant(&b) };
+            d.child(img(shown.clone()).id(crate::media::anim_id(&shown)).w_full().h(z(h)).rounded_t(z(radius)))
                 .on_mouse_down(gpui::MouseButton::Right, image_menu(b))
         })
 }
@@ -2137,5 +2154,20 @@ mod activity_header_tests {
         let mut custom = streaming("x");
         custom.kind = ActivityKind::Custom;
         assert_eq!(activity_header(&custom), None);
+    }
+}
+
+#[cfg(test)]
+mod banner_gate_tests {
+    use super::banner_animates;
+
+    #[test]
+    fn banner_follows_the_client_can_animate_rule() {
+        assert!(banner_animates(false, true, false, true));
+        assert!(!banner_animates(false, true, true, false));
+        assert!(!banner_animates(false, false, false, true));
+        assert!(banner_animates(false, false, true, false));
+        assert!(!banner_animates(true, true, false, true));
+        assert!(banner_animates(true, true, true, true));
     }
 }

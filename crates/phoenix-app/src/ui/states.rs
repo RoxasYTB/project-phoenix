@@ -112,11 +112,51 @@ pub fn set_hover(key: u64, over: bool) -> bool {
 }
 
 pub fn track(el: gpui::Stateful<Div>, key: u64) -> gpui::Stateful<Div> {
-    el.on_hover(move |over, window, _| {
+    el.child(hover_guard(key)).on_hover(move |over, window, _| {
         if set_hover(key, *over) {
             window.refresh();
         }
     })
+}
+
+thread_local! {
+    static FRAME: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+    static PAINTED: std::cell::RefCell<std::collections::HashMap<u64, u64>> = Default::default();
+}
+
+fn mark_painted(key: u64) {
+    let frame = FRAME.with(|f| f.get());
+    PAINTED.with(|p| p.borrow_mut().insert(key, frame));
+}
+
+pub fn begin_frame() {
+    let frame = FRAME.with(|f| {
+        let n = f.get() + 1;
+        f.set(n);
+        n
+    });
+    let gone = sweep(frame);
+    for key in gone {
+        forget(key);
+    }
+}
+
+fn sweep(frame: u64) -> Vec<u64> {
+    PAINTED.with(|p| {
+        let mut p = p.borrow_mut();
+        let gone: Vec<u64> = p.iter().filter(|(_, seen)| **seen + 1 < frame).map(|(k, _)| *k).collect();
+        for k in &gone {
+            p.remove(k);
+        }
+        gone.into_iter().filter(|k| hovered(*k)).collect()
+    })
+}
+
+pub fn blur_all() {
+    let keys: Vec<u64> = HOVER.with(|h| h.borrow().iter().filter(|(_, s)| s.0).map(|(k, _)| *k).collect());
+    for key in keys {
+        forget(key);
+    }
 }
 
 pub fn roll_place(line: f32, pos: f32) -> ((f32, f32), (f32, f32)) {
@@ -323,6 +363,7 @@ pub fn hover_guard(key: u64) -> gpui::AnyElement {
     gpui::canvas(
         |bounds, window, _| window.insert_hitbox(bounds, gpui::HitboxBehavior::Normal),
         move |_, hitbox, window, _| {
+            mark_painted(key);
             if hovered(key) && !hitbox.is_hovered(window) {
                 forget(key);
                 window.refresh();
@@ -334,4 +375,32 @@ pub fn hover_guard(key: u64) -> gpui::AnyElement {
     .left_0()
     .size_full()
     .into_any_element()
+}
+
+#[cfg(test)]
+mod sweep_tests {
+    use super::*;
+
+    #[test]
+    fn hover_of_an_anchor_that_stopped_painting_is_dropped() {
+        let (kept, gone) = (key("sweep-kept"), key("sweep-gone"));
+        set_hover(kept, true);
+        set_hover(gone, true);
+        FRAME.with(|f| f.set(10));
+        mark_painted(kept);
+        mark_painted(gone);
+        begin_frame();
+        mark_painted(kept);
+        begin_frame();
+        assert!(hovered(kept));
+        assert!(!hovered(gone));
+    }
+
+    #[test]
+    fn window_blur_clears_every_hover() {
+        let k = key("blur-all");
+        set_hover(k, true);
+        blur_all();
+        assert!(!hovered(k));
+    }
 }

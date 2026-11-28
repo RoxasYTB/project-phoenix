@@ -9,7 +9,7 @@ use crate::{
     presence::{Activity, ActivityKind, ProfileRequestState, format_date},
     theme::{Palette, c, generated::idx, tok, z},
     ui::home::data::{RelAction, RelationshipKind},
-    ui::profile::{Info, activity_header, avatar_block, banner, banner_buttons, ensure_avatar_colour, info, mana_button, mutuals_row, name_block_clickable, section_title, theme_backdrop},
+    ui::profile::{Info, activity_header, avatar_block, banner_buttons, banner_gated, ensure_avatar_colour, info, mana_button, mutuals_row, name_block_clickable, section_title, theme_backdrop},
 };
 
 const PROFILE_RETRY_DELAY: Duration = Duration::from_secs(30);
@@ -569,6 +569,7 @@ fn panel(app: &PhoenixApp, uid: Id, cx: &mut Context<PhoenixApp>) -> AnyElement 
         )
     };
     let e = cx.entity();
+    let panel_hover = crate::ui::states::key(("dm-profile-panel", uid.0));
     let content: Vec<AnyElement> = if hidden {
         vec![hidden_panel(app, uid, &i, blocked, cx).into_any_element()]
     } else {
@@ -579,7 +580,7 @@ fn panel(app: &PhoenixApp, uid: Id, cx: &mut Context<PhoenixApp>) -> AnyElement 
             .relative()
             .h(z(144.))
             .mb(z(8.))
-            .child(banner(&i, 105., 6.))
+            .child(banner_gated(&i, 105., 6., !crate::ui::states::hovered(panel_hover)))
             .child(banner_buttons(app, uid, None, 8., cx))
             .child(div().absolute().left(z(avatar_x)).top(z(avatar_y)).child(avatar_block(&i, 80., 6., ring_bg)))
             .children(
@@ -681,7 +682,7 @@ fn panel(app: &PhoenixApp, uid: Id, cx: &mut Context<PhoenixApp>) -> AnyElement 
             footer.into_any_element(),
         ]
     };
-    let card = div()
+    let card = crate::ui::states::track(div().id(("dm-profile-panel", uid.0)), panel_hover)
         .relative()
         .size_full()
         .p(z(2.))
@@ -705,13 +706,14 @@ fn panel(app: &PhoenixApp, uid: Id, cx: &mut Context<PhoenixApp>) -> AnyElement 
                 .children(if hidden { None } else { crate::ui::profile_toolbar::toast(uid, 105.) }),
         );
     let card = match frame {
-        None => card,
+        None => card.into_any_element(),
         Some(f) => div()
             .relative()
             .size_full()
             .children(crate::ui::profile_fx::frame(&f, 304., false, cx))
             .child(card)
-            .children(crate::ui::profile_fx::frame(&f, 304., true, cx)),
+            .children(crate::ui::profile_fx::frame(&f, 304., true, cx))
+            .into_any_element(),
     };
     div().w(z(320.)).flex_none().h_full().p(z(8.)).bg(c(Palette::BG_PRIMARY)).child(card).into_any_element()
 }
