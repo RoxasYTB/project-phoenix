@@ -61,6 +61,22 @@ pub fn composer_button_full(id: &'static str, i: Icon, glyph: f32, hover_bg: boo
 
 thread_local! {
     static HOVER: std::cell::RefCell<std::collections::HashMap<u64, (bool, std::time::Instant)>> = Default::default();
+    static TIP_CLICKED: std::cell::RefCell<std::collections::HashSet<u64>> = Default::default();
+}
+
+pub fn hide_tip_until_leave(key: u64) {
+    TIP_CLICKED.with(|t| t.borrow_mut().insert(key));
+}
+
+pub fn tip_shown(key: u64) -> bool {
+    hovered(key) && !TIP_CLICKED.with(|t| t.borrow().contains(&key))
+}
+
+fn hide_tip_on_click(el: gpui::Stateful<Div>, key: u64) -> gpui::Stateful<Div> {
+    el.on_mouse_down(gpui::MouseButton::Left, move |_, window, _| {
+        hide_tip_until_leave(key);
+        window.refresh();
+    })
 }
 
 pub fn key(id: impl std::hash::Hash) -> u64 {
@@ -107,6 +123,9 @@ pub fn set_hover(key: u64, over: bool) -> bool {
         let mut h = h.borrow_mut();
         let prev = h.get(&key).is_some_and(|s| s.0);
         h.insert(key, (over, std::time::Instant::now()));
+        if !over {
+            TIP_CLICKED.with(|t| t.borrow_mut().remove(&key));
+        }
         prev != over
     })
 }
@@ -313,7 +332,8 @@ pub fn header_button(id: &'static str, path: gpui::SharedString, selected: bool,
                 .text_color(rest)
                 .group_hover(id, move |s| s.text_color(hover)),
         )
-        .children(hovered(k).then(|| below_tip(label, 32., 32.)))
+        .children(tip_shown(k).then(|| below_tip(label, 32., 32.)))
+        .map(|d| hide_tip_on_click(d, k))
         .map(|d| crate::ui::focus_ring::ring(d, k, 4.))
 }
 
@@ -327,7 +347,8 @@ pub fn header_button_disabled(id: &'static str, path: gpui::SharedString, label:
         .items_center()
         .justify_center()
         .child(svg().path(path).size(z(20.)).flex_none().text_color(c(tok(idx::CHANNEL_ICON))))
-        .children(hovered(k).then(|| below_tip(label, 32., 32.)))
+        .children(tip_shown(k).then(|| below_tip(label, 32., 32.)))
+        .map(|d| hide_tip_on_click(d, k))
 }
 
 pub fn fade_to(key: u64, on: bool, rest: gpui::Hsla, hover: gpui::Hsla, ms: u64, radius: f32) -> gpui::AnyElement {

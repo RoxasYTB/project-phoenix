@@ -196,7 +196,7 @@ impl MentionResolver for Resolver<'_> {
         nick.or_else(|| self.users.get(&Id(id)).map(|u| u.display_name.to_string()))
     }
     fn channel(&self, id: u64) -> Option<String> {
-        self.channels.get(&Id(id)).map(|c| c.name.to_string())
+        self.channels.get(&Id(id)).or_else(|| self.nav.find_thread(Id(id))).map(|c| c.name.to_string())
     }
     fn current_guild(&self) -> Option<u64> {
         self.guild.map(|g| g.0)
@@ -1042,6 +1042,18 @@ impl PhoenixApp {
             return;
         }
         let pats: Vec<String> = users.iter().flat_map(|u| [format!("<@{u}>"), format!("<@!{u}>")]).collect();
+        self.rerender_matching(&pats);
+    }
+
+    pub(crate) fn rerender_channel_mentions_of(&mut self, channels: &[u64]) {
+        let pats: Vec<String> = channels.iter().map(|c| format!("<#{c}>")).collect();
+        self.rerender_matching(&pats);
+    }
+
+    fn rerender_matching(&mut self, pats: &[String]) {
+        if pats.is_empty() {
+            return;
+        }
         let chans: Vec<Id> = self.messages.keys().copied().collect();
         for ch in chans {
             let Some(mut entry) = self.messages.remove(&ch) else { continue };

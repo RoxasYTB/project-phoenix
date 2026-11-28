@@ -11,6 +11,30 @@ const PRELOAD_CAP: usize = 24;
 
 thread_local! {
     static PRELOADED: RefCell<VecDeque<Id>> = const { RefCell::new(VecDeque::new()) };
+    static ASKED_CHANNELS: RefCell<HashSet<u64>> = RefCell::new(HashSet::new());
+}
+
+pub(crate) fn unknown_channel_mentions(app: &PhoenixApp, msgs: &[Message]) -> Vec<u64> {
+    let (mut u, mut r, mut c) = (HashSet::new(), HashSet::new(), HashSet::new());
+    for m in msgs {
+        mention_ids(&m.content, &mut u, &mut r, &mut c);
+    }
+    let mut out: Vec<u64> = c.into_iter().filter(|id| !app.channels.contains_key(&Id(*id)) && app.nav.find_thread(Id(*id)).is_none()).collect();
+    out.sort_unstable();
+    out
+}
+
+pub(crate) fn fetch_mentioned_channels(app: &mut PhoenixApp, msgs: &[Message], cx: &mut Context<PhoenixApp>) {
+    let ids: Vec<u64> = unknown_channel_mentions(app, msgs).into_iter().filter(|id| ASKED_CHANNELS.with(|a| a.borrow_mut().insert(*id))).take(5).collect();
+    for id in ids {
+        app.parity_request(crate::commands::ParityRequest::FetchThread { id: Id(id) }, cx, move |a, r, cx| {
+            if let Ok(crate::commands::ParityReply::Thread(ch)) = r {
+                a.channels.entry(Id(id)).or_insert(ch);
+                a.rerender_channel_mentions_of(&[id]);
+                cx.notify();
+            }
+        });
+    }
 }
 
 pub fn on_refresh(app: &mut PhoenixApp, channel: Id, messages: Vec<Message>, cx: &mut Context<PhoenixApp>) {
@@ -263,7 +287,7 @@ pub fn page_resolver(app: &PhoenixApp, msgs: &[Message]) -> PageResolver {
         }
     }
     for id in c {
-        if let Some(ch) = app.channels.get(&Id(id)) {
+        if let Some(ch) = app.channels.get(&Id(id)).or_else(|| app.nav.find_thread(Id(id))) {
             out.channels.insert(id, ch.name.to_string());
         }
         if let Some(mc) = resolver.mention_channel(id) {
@@ -487,9 +511,14 @@ fn insert_first_page(app: &mut PhoenixApp, ch: Id, page: Vec<Message>, rendered:
     entry.msgs = page;
     entry.rendered = rendered;
     let len = entry.msgs.len();
+    let unknown = !unknown_channel_mentions(app, &entry.msgs).is_empty();
+    let msgs = if unknown { entry.msgs.clone() } else { Vec::new() };
     app.messages.insert(ch, entry);
     if app.selected_channel == Some(ch) {
         app.message_list.reset(len + 1);
+    }
+    if unknown {
+        fetch_mentioned_channels(app, &msgs, cx);
     }
     app.resume_pending_jump(ch, cx);
     cx.notify();
@@ -500,6 +529,34 @@ mod preload_tests {
     use std::sync::Arc;
 
     use crate::{app::PhoenixApp, backend::Backend, mock::MockBackend, model::ChannelKind};
+
+    #[gpui::test]
+    fn mention_of_a_thread_known_only_from_the_sidebar_shows_its_name(cx: &mut gpui::TestAppContext) {
+        let backend = Arc::new(MockBackend::synchronous());
+        let ready = futures::executor::block_on(backend.login(crate::backend::Credentials::Token("x".into()))).unwrap();
+        cx.update(gpui_component::init);
+        let window = cx.add_window(|w, cx| PhoenixApp::new(backend.clone(), w, cx));
+        window
+            .update(cx, |app, _, cx| {
+                app.apply_ready(ready, cx);
+                let g = app.guilds[0].id;
+                let text: Vec<_> = app.guild_channels[&g].iter().copied().filter(|c| app.channels[c].kind == ChannelKind::Text).collect();
+                let mut thread = app.channels[&text[0]].clone();
+                thread.id = crate::model::Id(987_654_321_012_345);
+                thread.name = "fil-de-test".into();
+                thread.parent = Some(text[0]);
+                let mut msg = app.messages.values().flat_map(|e| e.msgs.iter()).next().cloned().unwrap_or_default();
+                msg.content = format!("voir <#{}>", thread.id.0);
+                assert_eq!(super::unknown_channel_mentions(app, std::slice::from_ref(&msg)), vec![thread.id.0]);
+                app.nav.threads.entry(text[0]).or_default().push(thread.clone());
+                assert!(super::unknown_channel_mentions(app, std::slice::from_ref(&msg)).is_empty());
+                let r = super::page_resolver(app, std::slice::from_ref(&msg));
+                use crate::markdown::MentionResolver;
+                assert_eq!(r.channel(thread.id.0).as_deref(), Some("fil-de-test"));
+                assert_eq!(app.resolver().channel(thread.id.0).as_deref(), Some("fil-de-test"));
+            })
+            .unwrap();
+    }
 
     #[gpui::test]
     fn hovered_channel_is_in_memory_before_the_click(cx: &mut gpui::TestAppContext) {

@@ -125,7 +125,9 @@ pub fn install(composer: &Entity<gpui_component::input::TextareaState>, window: 
     let keys = cx.intercept_keystrokes(move |ev, window, cx| {
         let Some(app) = weak.upgrade() else { return };
         app.update(cx, |app, cx| {
-            if route_key(app, &ev.keystroke, window, cx) {
+            let routed = route_key(app, &ev.keystroke, window, cx);
+            ROUTED.set(routed);
+            if routed {
                 cx.stop_propagation();
             }
         });
@@ -136,6 +138,14 @@ pub fn install(composer: &Entity<gpui_component::input::TextareaState>, window: 
         }
     });
     vec![keys, ac]
+}
+
+thread_local! {
+    static ROUTED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+pub(crate) fn take_routed() -> bool {
+    ROUTED.replace(false)
 }
 
 fn route_key(app: &mut PhoenixApp, ks: &Keystroke, window: &mut Window, cx: &mut Context<PhoenixApp>) -> bool {

@@ -524,6 +524,9 @@ pub fn handlers(app: &PhoenixApp, root: Stateful<gpui::Div>, window: &gpui::Wind
     if with(|s| s.keys.is_none()) {
         let weak = cx.entity().downgrade();
         let sub = cx.intercept_keystrokes(move |ev, window, cx| {
+            if ui::pickers::take_routed() {
+                return;
+            }
             if is_main_window(window) && ui::context_menu::on_key(&ev.keystroke, window, cx) {
                 cx.stop_propagation();
                 return;

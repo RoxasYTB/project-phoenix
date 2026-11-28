@@ -730,3 +730,35 @@ fn pin_and_delete_confirm_modals_are_drawn_inside_the_window(cx: &mut TestAppCon
     let b = h.bounds("modal-card");
     assert!(inside(b), "delete modal at {b:?} outside {vp:?}");
 }
+
+#[gpui::test]
+fn escape_closes_the_search_and_brings_the_hidden_thread_back(cx: &mut TestAppContext) {
+    let mut h = keyed(cx);
+    let t = h.channels[1];
+    h.act(|a, w, cx| a.open_thread(crate::model::ThreadRef { id: t, name: "t".into(), message_count: 0 }, w, cx));
+    h.act(crate::ui::search::open);
+    h.act(|_, _, cx| {
+        if let Some(s) = cx.global_mut::<crate::ui::search::Search>().0.as_mut() {
+            s.request = Some(crate::ui::search::SearchRequest { content: Some("mire".into()), ..Default::default() });
+            s.page = Some(crate::ui::search::SearchPage::default());
+        }
+    });
+    assert!(h.ask(|_, _, cx| crate::ui::search::results_shown(cx)));
+    h.act(crate::ui::search::open);
+    assert!(h.ask(|_, w, cx| crate::ui::search::is_focused(w, cx)));
+    h.keys("escape");
+    assert!(!h.ask(|_, _, cx| crate::ui::search::is_open(cx)), "Esc did not close the search");
+    assert!(h.read(|a| a.chat.thread.as_ref().is_some_and(|p| p.thread.id == t)), "Esc closed the thread hidden behind the search");
+}
+
+#[test]
+fn header_tooltip_hides_on_click_until_the_pointer_leaves() {
+    let k = crate::ui::states::key(("hdr-btn", "pin-test"));
+    crate::ui::states::set_hover(k, true);
+    assert!(crate::ui::states::tip_shown(k));
+    crate::ui::states::hide_tip_until_leave(k);
+    assert!(!crate::ui::states::tip_shown(k), "the tooltip stays over the opened popout");
+    crate::ui::states::set_hover(k, false);
+    crate::ui::states::set_hover(k, true);
+    assert!(crate::ui::states::tip_shown(k), "hovering again shows the tooltip");
+}
