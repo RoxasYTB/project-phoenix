@@ -382,3 +382,23 @@ Sources: `c76f31703f6181cd.js` (CallTile / CallTileOverlay 175203), CSS `655282`
 
 ## Boutons flottants et clics (28/11)
 - ✅ La pastille participants, les boutons de la barre de contrôles (centre, carets, plateau, Raccrocher, chat, volume) et les toasts d appel occultent la souris (`occlude()`) : un clic, un double-clic ou un survol ne traverse plus vers la tuile de dessous (comme `pointer-events` du client, où le bouton est la seule cible). Les boutons dans une tuile gardent `stop_propagation` pour que la tuile reste survolée. Test : `overlay_click_tests` dans `call_view.rs`.
+
+## Picture-in-Picture: drag, throw, corner snap and spring (28/11)
+
+Source: `web.b63d846b329d6470.js` module 457864 (`Draggable` class `E`, `PictureInPictureWindow` class `S`, layer `N`), caller module 197808 (`maxX`/`maxY`), store module 334463 (`PictureInPictureStore`), sizes module 806931, spring module 222574 + 735556 in `361020.d60afd12118773da.js` (the `animated` library's `SpringAnimation`, not react-spring), CSS `69112.fa4e5348c09ccf76.css` (`pictureInPicture_69M0s9`) and `898957.9a5180cd7980e51f.css` (`pictureInPictureVideo_qOjco6`).
+
+| item | client | Phoenix | status |
+|---|---|---|---|
+| default corner | `PictureInPictureStore` default position `BOTTOM_RIGHT`, persisted | `pip::CORNER` starts at `BottomRight` (session only) | ✅ ➖ not persisted across restarts |
+| size | width `fG[VIDEO]` = 320, `aspect-ratio: 16/9`, `border-radius: 8px`; resizable 200..960 snapped to 40 px steps (bottom/top inner corner handle) | 320 × 180, radius 8 | ✅ ➖ resize handle not implemented |
+| bounds | `maxX` = window width (minus the call chat sidebar when the voice channel is the selected channel and its chat is open), `maxY` = window height | viewport / zoom | ✅ ➖ chat sidebar width not subtracted |
+| edge offsets | `I = {top: 80, bottom: 132, left: 80, right: 80}`; corner = `round(top)`, `round(maxY - bottom - height)`, `round(left)`, `round(maxX - right - width)`, then clamped by `translate` | `EDGE_*`, `corner_position` | ✅ (was 16 / 48 inset) |
+| drag start | mouse down anywhere on the card (`dragAnywhere`), drag starts once squared distance > 9 (3 px) | `DRAG_THRESHOLD_SQ = 9` | ✅ (was 6 px) |
+| drag follow | every mousemove starts a spring to `cursor - grab offset` with `{tension: 80, friction: 8}` (origami → 375 / 25), clamped to `[0, maxX - w] × [0, maxY - h]`; the card lags and wobbles behind the cursor | `Spring::animate_to(.., FOLLOW)` per move, `translate` | ✅ (was glued to the cursor) |
+| throw | velocity = Δcursor / Δms between the last two moves (`Date`, ms); decayed point = cursor + 200 × velocity; corner = left/right of `maxX / 2` and top/bottom of `maxY / 2` (strict `>`), measured on the cursor, not the card centre | `release_corner` | ✅ (was card centre, no inertia) |
+| settle | spring to the corner with the default config `{tension: 40, friction: 7}` (→ 230.2 / 22), velocity inherited from the running follow spring (`previousAnimation`), overshoot ≈ 3.68 %, at rest after ≈ 1182 ms (|v| ≤ 0.001 and |Δ| ≤ 0.001) | `SETTLE` | ✅ |
+| integrator | RK4 with 1 ms steps, elapsed time capped at 64 ms per frame, the 4th stage reuses `cVelocity` as in the library | `Spring::update` (same arithmetic, f64) | ✅ unit tests compare positions at 16..960 ms with values produced by running the client code in node (< 1e-8) |
+| window resize | `componentDidUpdate` on `maxX`/`maxY` → `ensureIsInPosition`: jumps (no animation) to the corner | idle card recomputes `corner_position` each render | ✅ |
+| reduced motion | the `animated` spring is used directly, no reduced-motion check in this path | same, no check | ✅ |
+| while dragging | card `pointer-events: none`, `cursor: grabbing`; the layer gets `.dragging` (full size, `cursor: grabbing`) | drag layer + card `cursor_grabbing` | ✅ |
+| click (no drag) | goes through to the PiP video's own click handler (return to the call) | `jump_to_call` | ✅ |
