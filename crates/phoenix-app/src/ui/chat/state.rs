@@ -1053,7 +1053,7 @@ impl PhoenixApp {
         if text.is_empty() && self.chat.uploads.is_empty() {
             return true;
         }
-        if text.len() > 2000 {
+        if super::composer::too_long(self.backend.premium_tier2(), &text) {
             self.chat.error = Some(crate::t!("chat.too_long"));
             cx.notify();
             return true;
