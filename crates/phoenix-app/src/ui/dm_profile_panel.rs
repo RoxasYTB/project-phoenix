@@ -611,7 +611,7 @@ fn panel(app: &PhoenixApp, uid: Id, cx: &mut Context<PhoenixApp>) -> AnyElement 
                             None
                         },
                     )
-                    .children(i.prof.and_then(|p| mutuals_row(p, uid, &cx.entity()))),
+                    .children(i.prof.and_then(|p| mutuals_row(p, uid, app, &cx.entity()))),
             )
             .children(incoming_request_card(app, uid, &i, cx))
             .children(blocked_notice(app, uid, blocked, ignored, cx))

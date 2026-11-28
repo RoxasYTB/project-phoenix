@@ -976,7 +976,35 @@ pub(crate) fn bio_block(bio: SharedString, clamp: bool) -> Div {
         })
 }
 
-pub(crate) fn mutuals_row(p: &Profile, uid: Id, e: &gpui::Entity<PhoenixApp>) -> Option<Div> {
+fn mutual_guild_icon(g: &crate::model::Guild, notched: bool) -> gpui::AnyElement {
+    const SIZE: f32 = 16.;
+    match &g.icon {
+        ImageRef::Url(u) if notched => crate::ui::squircle::notched_image(u.clone(), SIZE).size(z(SIZE)).into_any_element(),
+        ImageRef::Url(u) => crate::ui::squircle::image(u.clone(), SIZE).size(z(SIZE)).into_any_element(),
+        _ => div()
+            .relative()
+            .size(z(SIZE))
+            .flex()
+            .items_center()
+            .justify_center()
+            .child(crate::ui::squircle::shape().absolute().top_0().left_0().size_full().text_color(c(tok(idx::BACKGROUND_SURFACE_HIGH))))
+            .child(div().text_size(z(6.)).line_height(z(8.)).font_weight(gpui::FontWeight::MEDIUM).text_color(c(tok(idx::TEXT_DEFAULT))).child(g.acronym.clone()))
+            .into_any_element(),
+    }
+}
+
+pub(crate) fn mutual_guild_stack(guilds: &[&crate::model::Guild]) -> Option<Div> {
+    if guilds.is_empty() {
+        return None;
+    }
+    let shown = guilds.len().min(3);
+    Some(div().flex().flex_none().items_center().children(guilds.iter().take(shown).enumerate().map(|(n, g)| {
+        let last = n + 1 == shown;
+        div().flex_none().when(!last, |d| d.mr(z(-3.))).child(mutual_guild_icon(g, !last))
+    })))
+}
+
+pub(crate) fn mutuals_row(p: &Profile, uid: Id, app: &PhoenixApp, e: &gpui::Entity<PhoenixApp>) -> Option<Div> {
     let friends = p.mutual_friends_count;
     let servers = p.mutual_guilds;
     if friends == 0 && servers == 0 {
@@ -999,6 +1027,7 @@ pub(crate) fn mutuals_row(p: &Profile, uid: Id, e: &gpui::Entity<PhoenixApp>) ->
             .hover(|s| s.underline())
             .on_click(move |_, _, cx| e.update(cx, |a, cx| a.open_profile_modal_at(uid, tab, cx)))
     };
+    let guilds: Vec<&crate::model::Guild> = p.mutual_guild_ids.iter().filter_map(|id| app.guilds.iter().find(|g| g.id == *id)).collect();
     let stack = div().flex().children(p.mutual_friends.iter().take(3).enumerate().map(|(n, u)| {
         div().when(n < 2.min(p.mutual_friends.len().saturating_sub(1)), |d| d.mr(z(-3.))).child(crate::ui::avatar(Some(u), 16.))
     }));
@@ -1013,7 +1042,7 @@ pub(crate) fn mutuals_row(p: &Profile, uid: Id, e: &gpui::Entity<PhoenixApp>) ->
                 d.child(section(TAB_FRIENDS).when(!p.mutual_friends.is_empty(), |s| s.child(stack)).child(text(if friends == 1 { crate::t!("profile.mutual_friends_one", n = friends) } else { crate::t!("profile.mutual_friends", n = friends) })))
             })
             .when(both, |d| d.child(div().size(z(4.)).rounded_full().bg(c(tok(idx::INTERACTIVE_TEXT_DEFAULT)))))
-            .when(servers > 0, |d| d.child(section(TAB_SERVERS).child(text(if servers == 1 { crate::t!("profile.mutual_servers_one", n = servers) } else { crate::t!("profile.mutual_servers", n = servers) })))),
+            .when(servers > 0, |d| d.child(section(TAB_SERVERS).when(friends == 0, |s| s.children(mutual_guild_stack(&guilds))).child(text(if servers == 1 { crate::t!("profile.mutual_servers_one", n = servers) } else { crate::t!("profile.mutual_servers", n = servers) })))),
     )
 }
 
@@ -1247,7 +1276,7 @@ fn popout_card_inner(
         }
         Some(p) => {
             if uid != app.me.id {
-                body = body.children(mutuals_row(p, uid, &cx.entity()));
+                body = body.children(mutuals_row(p, uid, app, &cx.entity()));
             }
             if !p.bio.is_empty() {
                 body = body.child(bio_block(p.bio.clone(), true));
