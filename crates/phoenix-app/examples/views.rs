@@ -89,12 +89,12 @@ fn main() -> anyhow::Result<()> {
                     "gif" => pickers::open(app, pickers::Tab::Gif, pickers::EmojiTarget::Composer, window, cx),
                     "sticker" => pickers::open(app, pickers::Tab::Sticker, pickers::EmojiTarget::Composer, window, cx),
                     "friends" => app.select_guild(None, cx),
-                    "friends-all" | "friends-pending" => {
+                    "friends-all" | "friends-pending" | "friends-add" => {
                         app.select_guild(None, cx);
-                        app.nav.friends_tab = if scene == "friends-all" {
-                            phoenix_app::ui::home::data::FriendsTab::All
-                        } else {
-                            phoenix_app::ui::home::data::FriendsTab::Pending
+                        app.nav.friends_tab = match scene.as_str() {
+                            "friends-all" => phoenix_app::ui::home::data::FriendsTab::All,
+                            "friends-add" => phoenix_app::ui::home::data::FriendsTab::AddFriend,
+                            _ => phoenix_app::ui::home::data::FriendsTab::Pending,
                         };
                     }
                     "inbox" | "pins" | "threads" | "search" => {

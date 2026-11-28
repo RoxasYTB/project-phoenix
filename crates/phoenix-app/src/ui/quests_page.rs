@@ -51,7 +51,6 @@ pub struct Quest {
     pub video_thumb: Option<SharedString>,
     pub video_portrait: bool,
     pub dismissed_content: u64,
-    pub completed_at: Option<DateTime<Utc>>,
     pub rewards_expire: Option<DateTime<Utc>>,
 }
 
@@ -485,7 +484,6 @@ pub fn parse(v: &Value, now: DateTime<Utc>) -> Vec<Quest> {
                 .get("WATCH_VIDEO")
                 .is_some_and(|t| t["assets"]["video"]["height"].as_u64().unwrap_or(0) > t["assets"]["video"]["width"].as_u64().unwrap_or(u64::MAX)),
             dismissed_content: us["dismissed_quest_content"].as_u64().unwrap_or(0),
-            completed_at: date(&us["completed_at"]),
             rewards_expire: date(&cfg["rewards_config"]["rewards_expire_at"]),
         });
     }
@@ -1352,7 +1350,6 @@ mod tests {
             video_thumb: None,
             video_portrait: false,
             dismissed_content: 0,
-            completed_at: None,
             rewards_expire: None,
         };
         f(&mut x);

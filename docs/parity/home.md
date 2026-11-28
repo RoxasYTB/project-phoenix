@@ -132,3 +132,15 @@ No real-data compare ran for this pass: the user's Discord was on a guild channe
 | item | client | Phoenix | status |
 |---|---|---|---|
 | hero badge seen state | `AdContentSeenStore` (web 113597), a PersistedStore (localStorage `AdContentSeenStore` = `{seenContentIds: {creativeType: [ids]}}`); the Quests row click dispatches `AD_CONTENT_MARK_SEEN` for type 2 (QUEST_HOME_HERO); `QUESTS_FETCH_QUEST_HOME_HERO_SUCCESS` drops type 2 ids other than the fetched hero | `quests_page::SeenStore` saved as `ad-content-seen.json` in the config dir, pruned after each successful hero fetch | ✅ test `seen_store_round_trips_like_the_client` |
+
+## Quest bar above the account panel (28/11, wt/visual-sweep)
+
+| Item | Client source | Phoenix | Status |
+|---|---|---|---|
+| Visibility | `8947ac8975a4bb57.js` `TQ`: hidden when claimed, expired, dismissed for `QUEST_BAR` (`dismissed_quest_content & 2`, `221596.TY`) or not eligible; desktop placement `DESKTOP_ACCOUNT_PANEL_AREA = 1` (`GET /quests/decision?placement=1`) | `ui/quest_bar.rs`: the most recently enrolled quest of `GET /quests/@me` that passes the same tests; shown on Friends only (live capture `zoom28/client_friends150.png`), hidden in a call | ✅ enrolled quests; ❌ unenrolled promoted quests (they come from the ad decision, not fetched) |
+| Collapsed layout | chunk 46071 `5f0d38d6f7edc542.js` `eF`/`eR`; `.contentCollapsedInset_7Oadp0{padding:14px 12px}`, `.questProgressWrapper_TTqPW3{gap:8px}`, `.wrapper_jdr5pz{background:var(--background-base-lower)}` | 70 px row, 12/14 padding, 8 gap, base-lower background | ✅ |
+| Progress ring | `453384` (`88dccc0432747edc.js`): size 42, `style:"small"` stroke 3, padding stroke+2, track `--background-mod-strong` drawn twice, arc `--status-positive` from −90° (`.progress_loRtN1`) | canvas ring, same sizes and colours, reward art clipped round inside | ✅ |
+| Title | `q()` in `8479adc51144af78.js`: `ij5E/5` completed, `lVZaXD` (floored percent) when enrolled with progress, `mOrpXG` play quests, `7e5k7L` otherwise; `body-sm/semibold`, `text-strong` | `quests.bar_*` | ✅ |
+| Subtitle | `b()` collapsed: `APddvF` (claim by) completed, `o+e9yh` video, `mOrpXG` with progress, `S6UUc5` without; `body-xs/normal`, `text-subtle` | same keys | ✅; ➖ live in-game progress text (`YT`, needs the heartbeat) |
+| Expanded bar (hover / click), confetti, ⋯ menu | `tF` / `tR`, `.borders_VCaaii`, `.confetti_VCaaii`, `eU` | click opens Quest Home | ❌ not built |
+
