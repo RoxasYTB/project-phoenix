@@ -415,6 +415,7 @@ impl Run<'_, '_> {
                 "rows" => a.selected_channel.and_then(|c| a.messages.get(&c)).map_or_else(|| "-".into(), |e| format!("{}/{}", e.msgs.len(), e.rendered.len())),
                 "inbox" => b(a.parity.inbox.open),
                 "threads_panel" => b(a.parity.threads_open),
+                "thread" => a.chat.thread.as_ref().map_or_else(|| if a.thread_form_open() { "form".into() } else { "-".into() }, |t| t.thread.id.0.to_string()),
                 "pins" => a.chat.pins.as_ref().map_or_else(|| "-1".into(), |p| if p.loading { "-2".into() } else { p.msgs.len().to_string() }),
                 "members_shown" => b(a.show_members),
                 "help" => b(phoenix_app::shortcuts::help_open()),
@@ -696,6 +697,28 @@ impl Run<'_, '_> {
                         }
                     })
                 })?;
+                self.frames(cx, 1500);
+            }
+            "thread" => {
+                let wanted = if rest.is_empty() { None } else { Some(phoenix_app::model::Id(rest.parse()?)) };
+                let found = cx.update_window(self.env.win, |_, window, cx| {
+                    self.env.app.update(cx, |app, cx| {
+                        let ch = app.selected_channel?;
+                        let known = app.messages.get(&ch)?.msgs.iter().rev().filter_map(|m| m.thread.clone()).find(|t| wanted.is_none_or(|w| w == t.id));
+                        if let Some(t) = known {
+                            let id = t.id;
+                            app.open_thread(t, window, cx);
+                            return Some(format!("thread {}", id.0));
+                        }
+                        if wanted.is_some() {
+                            return None;
+                        }
+                        app.open_create_thread(ch, window, cx);
+                        app.thread_form_open().then(|| "new thread form".to_string())
+                    })
+                })?;
+                let what = found.ok_or_else(|| anyhow::anyhow!("no thread {rest} in the loaded messages"))?;
+                println!("QA value [{}] opened {what}", self.step);
                 self.frames(cx, 1500);
             }
             "select" => {

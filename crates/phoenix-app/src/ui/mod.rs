@@ -88,6 +88,7 @@ pub mod server_bar;
 pub mod server_pages;
 pub mod sidebar;
 pub mod sidebar_resize;
+pub mod thread_resize;
 pub mod states;
 pub mod popout_motion;
 pub mod hover_icon;

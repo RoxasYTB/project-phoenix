@@ -72,7 +72,9 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
     app.backend.set_members_shown(app.show_members && app.chat.thread.is_none() && !search_results);
     let mod_view = crate::ui::mod_view::render(app, window, cx);
     let search_width = crate::ui::search::results_width();
-    let (thread_width, thread_floating) = thread_sidebar_layout(in_voice_panel, crate::ui::search::chat_width(window));
+    let chat_w = crate::ui::search::chat_width(window);
+    let (thread_width, thread_floating) = thread_sidebar_layout(in_voice_panel, chat_w, crate::ui::thread_resize::saved());
+    let thread_max = chat_w - z(THREAD_SIDEBAR_RESERVED_W);
     let thread_sidebar = if search_results {
         None
     } else {
@@ -160,7 +162,14 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
             .flex()
             .flex_row()
             .child(main)
-            .when_some(thread_sidebar, |d, tp| d.child(div().w(z(8.)).flex_none().h_full()).child(tp))
+            .when_some(thread_sidebar, |d, tp| {
+                let spacer = if in_voice_panel {
+                    div().w(z(crate::ui::thread_resize::HANDLE_W)).flex_none().h_full().into_any_element()
+                } else {
+                    crate::ui::thread_resize::handle(thread_width, thread_max, cx).into_any_element()
+                };
+                d.child(spacer).child(tp)
+            })
             .children(mod_view)
             .when(search_results, |d| d.child(div().flex_none().w(search_width)))
             .into_any_element()
@@ -193,15 +202,18 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
     }
 }
 
-const THREAD_SIDEBAR_MIN_W: f32 = 450.;
 const THREAD_SIDEBAR_RESERVED_W: f32 = 315.;
 
-pub(crate) fn thread_sidebar_layout(in_voice_panel: bool, chat_width: gpui::Pixels) -> (gpui::Pixels, bool) {
+pub(crate) fn thread_sidebar_layout(in_voice_panel: bool, chat_width: gpui::Pixels, saved: f32) -> (gpui::Pixels, bool) {
     if in_voice_panel {
         return (z(480.), false);
     }
+    let min = z(crate::ui::thread_resize::MIN_W);
     let max = chat_width - z(THREAD_SIDEBAR_RESERVED_W);
-    (z(THREAD_SIDEBAR_MIN_W), max <= z(THREAD_SIDEBAR_MIN_W))
+    if max <= min {
+        return (min, true);
+    }
+    (z(crate::ui::thread_resize::clamp(saved, f32::from(max) / crate::theme::zoom())), false)
 }
 
 fn guild_discoverable(app: &PhoenixApp) -> bool {
@@ -2807,12 +2819,15 @@ mod indent_tests {
     }
 }#[test]
     fn thread_sidebar_floats_when_the_chat_area_is_narrow() {
-        let at = |w: f32| crate::ui::chat::thread_sidebar_layout(false, gpui::px(w));
+        let at = |w: f32| crate::ui::chat::thread_sidebar_layout(false, gpui::px(w), 450.);
         assert_eq!(at(628.), (gpui::px(450.), true));
         assert_eq!(at(765.), (gpui::px(450.), true));
         assert_eq!(at(788.), (gpui::px(450.), false));
         assert_eq!(at(968.), (gpui::px(450.), false));
-        assert_eq!(crate::ui::chat::thread_sidebar_layout(true, gpui::px(300.)), (gpui::px(480.), false));
+        assert_eq!(crate::ui::chat::thread_sidebar_layout(true, gpui::px(300.), 450.), (gpui::px(480.), false));
+        let saved = |w: f32, s: f32| crate::ui::chat::thread_sidebar_layout(false, gpui::px(w), s);
+        assert_eq!(saved(1200., 600.), (gpui::px(600.), false));
+        assert_eq!(saved(1000., 900.), (gpui::px(685.), false));
     }
 
     

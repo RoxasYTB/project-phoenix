@@ -721,6 +721,7 @@ impl PhoenixApp {
             self.remember_chat_position();
             self.chat.create_thread = None;
             self.selected_channel = None;
+            crate::ui::search::on_context_change(self, cx);
             self.message_list.reset(0);
             self.save_nav_prefs();
         }
@@ -833,6 +834,7 @@ impl PhoenixApp {
             self.chat.create_thread = None;
         }
         self.selected_channel = Some(id);
+        crate::ui::search::on_context_change(self, cx);
         crate::notifications::clear(id.0);
         crate::ui::chat::voice_message::on_channel_change(self, cx);
         if !guild.is_some_and(ui::join_flow::is_lurking) {

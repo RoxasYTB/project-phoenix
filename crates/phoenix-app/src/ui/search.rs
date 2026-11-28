@@ -19,7 +19,7 @@ use crate::{
 };
 
 pub const PAGE: u32 = 25;
-const WIDTH: f32 = 420.;
+const WIDTH: f32 = 418.;
 
 pub(super) fn results_width() -> gpui::Pixels {
     px(WIDTH)
@@ -291,6 +291,21 @@ pub fn open(_app: &mut PhoenixApp, window: &mut Window, cx: &mut Context<Phoenix
         _sub: sub,
     })));
     cx.notify();
+}
+
+pub(crate) fn on_context_change(app: &PhoenixApp, cx: &mut App) {
+    let Some(req) = cx.try_global::<Search>().and_then(|s| s.0.as_ref()).and_then(|s| s.request.as_ref()) else { return };
+    let same = if req.all_dms {
+        in_dm(app)
+    } else if req.guild.is_some() {
+        req.guild == app.selected_guild
+    } else {
+        app.selected_guild.is_none() && req.channel == app.selected_channel
+    };
+    if !same {
+        cx.global_mut::<Search>().0 = None;
+        cx.refresh_windows();
+    }
 }
 
 pub fn close(app: &mut PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp>) {

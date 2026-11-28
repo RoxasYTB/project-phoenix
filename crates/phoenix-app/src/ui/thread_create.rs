@@ -69,6 +69,10 @@ impl PhoenixApp {
         self.chat.create_thread.as_ref().filter(|form| self.selected_channel == Some(form.channel))
     }
 
+    pub fn thread_form_open(&self) -> bool {
+        self.active_thread_form().is_some()
+    }
+
     pub fn open_create_thread(&mut self, channel: Id, window: &mut Window, cx: &mut Context<Self>) {
         if self.selected_channel != Some(channel)
             || !self.channels.get(&channel).is_some_and(|c| c.guild.is_some() && matches!(c.kind, ChannelKind::Text | ChannelKind::Announcement))

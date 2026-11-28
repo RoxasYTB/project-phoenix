@@ -192,3 +192,8 @@ what public media (PRs, issues, README) must use:
 PHX_W=1280 PHX_H=800 PHX_SCALE=1.5 PHX_SCRIPT=hover.qa int-bin/screenshot out/after.png
 python3 scripts/media/gif.py out/after-hover.ffconcat out/after-hover.gif
 ```
+
+`thread [id]` opens a thread of the selected channel in the sidebar: the given id, or the
+newest thread started from a loaded message; without an id and with no thread in the
+loaded messages it opens the « new thread » sidebar form instead (same width rules). The
+probe `thread` prints the open thread id, `form` for that form, `-` otherwise.
