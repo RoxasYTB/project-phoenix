@@ -99,7 +99,6 @@ fn cell(s: &StickerData, section: SharedString, inspected: bool, locked: bool) -
                 .when(locked, |d| d.opacity(if crate::theme::is_light() { 0.4 } else { 0.3 }))
                 .child(sticker_graphic(s, CELL - 2.)),
         )
-        .when(inspected, |d| d.child(div().absolute().inset_0().rounded(px(12.)).border_2().border_color(tk(idx::INTERACTIVE_TEXT_HOVER))))
         .into_any_element()
 }
 
