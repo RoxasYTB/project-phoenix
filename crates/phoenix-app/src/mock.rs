@@ -590,7 +590,7 @@ impl Backend for MockBackend {
     }
     fn quest_decision(&self) -> BoxFuture<serde_json::Value> {
         let v = (std::env::var("PHX_MOCK_QUEST").as_deref() == Ok("new")).then(|| {
-            serde_json::json!({"creative": {"creative_type": 1, "creative_content": {"id": "2", "expires_at": "2999-01-01T00:00:00+00:00",
+            serde_json::json!({"creative": {"creative_type": 1, "creative_content": {"id": "2", "expires_at": "2999-01-01T00:00:00+00:00", "assets": {"hero": crate::ui::quests_page::HERO_ART},
                 "messages": {"quest_name": "Ferris Quest", "game_title": "Ferris Quest", "game_publisher": "Phoenix"},
                 "rewards_config": {"rewards": [{"type": 4, "orb_quantity": 700, "messages": {"name": "700 Orbs"}}]},
                 "task_config_v2": {"tasks": {"PLAY_ON_DESKTOP": {"target": 900}}}}}, "user_status": null})

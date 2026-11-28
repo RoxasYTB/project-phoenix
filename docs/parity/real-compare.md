@@ -1014,3 +1014,17 @@ regions, so it is not a layout score. The quest bar matches the live capture (`z
 title and subtitle. ❌ the reward art is not clipped round inside the ring (square corners show). Still not compared:
 keybinds modal, Friends context menus, image viewer, voice messages, report modal, server onboarding (no client reference
 reachable without navigating the CDP client, and real sessions were off limits for this pass).
+
+### Demo views against the client (28/11 22:00, int-bin 90334c0f + wt/visual-sweep)
+
+Scale fix first: the `views` example inherited the local settings (the user's 150 % zoom), so every earlier `views`
+render was 1.5× too large. It now forces 100 % zoom and 16 px text (`PHX_ZOOM` to override) and honours `PHX_SCALE`.
+Scores are `mismatch_pct` (pixels differing by more than 24/255) on the region of each view only, Phoenix in Onyx (the client is midnight).
+
+| View | Client reference | Region (CSS px) | Mismatch | Notes |
+|---|---|---|---|---|
+| Report a message | `compare/report/client1/s0.png`, 1536×840 dpr 1.25, real `message` menu (`dumps/report/message.txt` via `PHX_MOCK_REPORT_DIR`) | modal 546,125 444×590 | **8.3** | same title, subtitle, option rows and sizes; fixed after the score: preview card 75 → 82 px (`messagePreviewContainer` 16/16/16/0 + `wrapper cozy` 2/20/2/80, avatar 20 px from the edge, 20 px before the text) and channel mentions in the preview went through markdown (`<#id>` was raw) |
+| Add Friend | `dumps/vanilla-friends-addfriend.png`, 1280×700 dpr 1.5 | section 446,82 444×302, Phoenix shifted 53 px (the client sidebar was resized to 335 px) | **17.1** | box, Wumpus, input row, note area and counter line up; the rest is French vs English text |
+| Keyboard combos (Ctrl+/) | `ref-cache/shortcuts-modal-default.json`, 1536×840 | card grid | geometry ✅ | first card 317,274, height 81, gap 24, four columns, `minmax(180px, max-content)`: card widths follow the label, so they differ only where the French labels are longer |
+| Quest bar (collapsed) | `zoom28/client_friends150.png`, 853×467 dpr 2.25 | ring and text | layout ✅ | ring, title, subtitle at the same place; fixed: the accepted bar sits on the post-enrollment background (`--home-background`, 90° gradient to `#CDD8FF1A`, 2 px `--background-mod-subtle` top border), it was base-lower (black in Onyx) |
+| Friends context menu, image viewer, server onboarding, voice messages | no client capture without navigating the CDP client | — | not scored | demo scenes `friends-menu`, `modal-viewer`, `modal-onboarding` render; voice messages stay as measured in `voice-messages.md` |
