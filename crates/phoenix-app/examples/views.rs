@@ -121,6 +121,7 @@ fn main() -> anyhow::Result<()> {
                         if let Some(id) = dm {
                             app.select_channel(id, cx);
                         }
+                        app.show_members = true;
                     }
                     "dm-menu" | "dm-submenu" => {
                         app.select_guild(None, cx);
