@@ -3,7 +3,7 @@ use std::sync::atomic::{AtomicU32, Ordering};
 
 use gpui::{
     Bounds, Context, DispatchPhase, InteractiveElement, IntoElement, MouseButton, MouseMoveEvent, MouseUpEvent, ParentElement, Pixels, Styled,
-    canvas, div, prelude::*,
+    canvas, div,
 };
 
 use crate::app::PhoenixApp;
