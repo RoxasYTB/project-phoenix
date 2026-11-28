@@ -131,6 +131,7 @@ pub struct CaptureParams {
 }
 
 pub const KEYFRAME_MIN_INTERVAL: Duration = Duration::from_secs(1);
+pub const WARMUP_KEYFRAME_AFTER: Duration = Duration::from_secs(1);
 
 pub struct Camera {
     stop: Arc<AtomicBool>,
@@ -288,6 +289,7 @@ impl Camera {
                 let mut next = Instant::now();
                 let mut first = true;
                 let mut last_key = Instant::now();
+                let mut warmup_key = true;
                 while !s2.load(Ordering::Relaxed) {
                     if let Some(target) = r2.lock().ok().and_then(|mut slot| slot.take())
                         && target != current
@@ -306,6 +308,7 @@ impl Camera {
                                 }
                                 current = target;
                                 first = true;
+                                warmup_key = true;
                             }
                             Err(e) => tracing::warn!(error = %e, "camera: reconfigure failed"),
                         }
@@ -329,7 +332,11 @@ impl Camera {
                     if let Ok(mut p) = p2.lock() {
                         *p = Some(frame.clone());
                     }
-                    let force = first || (k2.load(Ordering::Relaxed) && last_key.elapsed() >= KEYFRAME_MIN_INTERVAL);
+                    let warmup = warmup_key && !first && last_key.elapsed() >= WARMUP_KEYFRAME_AFTER;
+                    let force = first || warmup || (k2.load(Ordering::Relaxed) && last_key.elapsed() >= KEYFRAME_MIN_INTERVAL);
+                    if warmup {
+                        warmup_key = false;
+                    }
                     if force {
                         k2.store(false, Ordering::Relaxed);
                         last_key = Instant::now();
@@ -524,6 +531,38 @@ mod tests {
         cam.stop();
         let keys = log.lock().unwrap().clone();
         assert!(!flag.load(Ordering::Relaxed));
+        assert!(keys[0]);
+        assert_eq!(keys.iter().filter(|k| **k).count(), 2);
+    }
+
+    #[test]
+    fn a_second_keyframe_follows_the_start_without_any_request() {
+        struct Keys(Arc<Mutex<Vec<bool>>>);
+        impl VideoEncoder for Keys {
+            fn codec(&self) -> Codec {
+                Codec::H264
+            }
+            fn encode(&mut self, frame: &VideoFrame, force_keyframe: bool) -> Result<Option<EncodedVideo>> {
+                self.0.lock().unwrap().push(force_keyframe);
+                Ok(Some(EncodedVideo { codec: Codec::H264, keyframe: force_keyframe, data: vec![0, 0, 0, 1, 0x65], pts_us: frame.pts_us }))
+            }
+            fn set_bitrate(&mut self, _bps: u32) -> Result<()> {
+                Ok(())
+            }
+        }
+        let log = Arc::new(Mutex::new(Vec::new()));
+        let l2 = log.clone();
+        let cam = Camera::start_with_factory(
+            Input::TestPattern,
+            CaptureParams { width: 64, height: 36, fps: 50, bitrate: 500_000 },
+            true,
+            move |_| Ok(Box::new(Keys(l2.clone()))),
+            |_| {},
+        )
+        .unwrap();
+        std::thread::sleep(WARMUP_KEYFRAME_AFTER + Duration::from_millis(600));
+        cam.stop();
+        let keys = log.lock().unwrap().clone();
         assert!(keys[0]);
         assert_eq!(keys.iter().filter(|k| **k).count(), 2);
     }
