@@ -206,7 +206,7 @@ pub fn render(app: &PhoenixApp, window: &gpui::Window, cx: &mut Context<PhoenixA
                 .gap(z(12.))
                 .when(crate::updater::available_release().is_some(), |d| {
                     d.child(
-                        bar_button_tinted("title-update", Icon::Download, tok(idx::GREEN_360), crate::t!("update.titlebar_tip"))
+                        bar_button_tinted("title-update", Icon::Download, tok(idx::ICON_FEEDBACK_WARNING), crate::t!("update.titlebar_tip"))
                             .on_click(cx.listener(|_, _, w, cx| {
                                 crate::actions::open_modal(crate::ui::modals::Modal::Update, Some(w));
                                 cx.notify();
