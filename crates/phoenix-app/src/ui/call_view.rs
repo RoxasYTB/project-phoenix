@@ -1313,31 +1313,33 @@ fn focused_layer(app: &PhoenixApp, tiles: &[Tile], fi: usize, gw: f32, gh: f32, 
 }
 
 fn strip_button(open: bool, top: f32, fade: f32, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
+    div().absolute().left_0().right_0().top(z(top)).flex().justify_center().opacity(fade).child(participants_pill(open).on_click(cx.listener(|_, _, _, cx| {
+        set_strip_open(!strip_open());
+        cx.notify();
+    })))
+}
+
+fn participants_pill(open: bool) -> gpui::Stateful<gpui::Div> {
     let white = t(idx::WHITE);
-    div().absolute().left_0().right_0().top(z(top)).flex().justify_center().opacity(fade).child(
-        div()
-            .id("call-participants")
-            .h(z(32.))
-            .p(z(4.))
-            .rounded(z(48.))
-            .flex()
-            .items_center()
-            .bg(t(idx::PRIMARY_630))
-            .hover(|s| s.bg(t(idx::PRIMARY_700)))
-            .shadow(crate::ui::inbox::popout_shadow())
-            .cursor_pointer()
-            .tip(if open {
-                crate::t!("call.hide_members")
-            } else {
-                crate::t!("call.show_members")
-            })
-            .child(named(if open { "chevron" } else { "chevron-up" }, 24., white))
-            .child(named("members", 24., white).mr(z(4.)))
-            .on_click(cx.listener(|_, _, _, cx| {
-                set_strip_open(!strip_open());
-                cx.notify();
-            })),
-    )
+    div()
+        .id("call-participants")
+        .occlude()
+        .h(z(32.))
+        .p(z(4.))
+        .rounded(z(48.))
+        .flex()
+        .items_center()
+        .bg(t(idx::PRIMARY_630))
+        .hover(|s| s.bg(t(idx::PRIMARY_700)))
+        .shadow(crate::ui::inbox::popout_shadow())
+        .cursor_pointer()
+        .tip(if open {
+            crate::t!("call.hide_members")
+        } else {
+            crate::t!("call.show_members")
+        })
+        .child(named(if open { "chevron" } else { "chevron-up" }, 24., white))
+        .child(named("members", 24., white).mr(z(4.)))
 }
 
 const CHAT_W: f32 = 480.;
@@ -1395,6 +1397,7 @@ fn top_bar(app: &PhoenixApp, name: SharedString, selected: Option<(Id, bool)>, c
                 .child(
                     div()
                         .id("call-chat")
+                        .occlude()
                         .size(z(24.))
                         .rounded(z(8.))
                         .flex()
@@ -2267,6 +2270,7 @@ fn center_button_full(
         .when(caret, |d| d.rounded_l(z(8.)))
         .when(!caret, |d| d.rounded(z(8.)))
         .cursor_pointer()
+        .occlude()
         .tip(tip)
         .child(icon)
         .when_some(right_caret, |d, f| {
@@ -2292,6 +2296,7 @@ fn center_button_full(
                 .cursor_pointer()
                 .child(named(if active { "chevron-up" } else { "chevron" }, 16., caret_color))
                 .id(SharedString::from(format!("{id}-caret")))
+                .occlude()
                 .when_some(caret_tip, |d, tip| d.tip(tip))
                 .when_some(on_caret, |d, f| d.on_click(cx.listener(move |a, ev: &gpui::ClickEvent, _, cx| f(a, ev.position(), cx)))),
         );
@@ -2328,6 +2333,7 @@ pub(crate) fn tray_icon(id: &'static str, icon: gpui::Svg, tip: SharedString) ->
         .items_center()
         .justify_center()
         .cursor_pointer()
+        .occlude()
         .tip(tip)
         .child(icon)
 }
@@ -2486,6 +2492,7 @@ fn bottom_controls(app: &PhoenixApp, level: Collapse, fullscreen: bool, selected
                         .bg(t(idx::CONTROL_CRITICAL_PRIMARY_BACKGROUND_DEFAULT))
                         .hover(|s| s.bg(t(idx::CONTROL_CRITICAL_PRIMARY_BACKGROUND_HOVER)))
                         .cursor_pointer()
+                        .occlude()
                         .tip(hangup.label())
                         .child(if hangup.disconnects() {
                             anim(
@@ -2529,6 +2536,76 @@ fn bottom_controls(app: &PhoenixApp, level: Collapse, fullscreen: bool, selected
 
 pub(crate) fn stream_empty_preview(light: bool) -> &'static str {
     if light { "https://discord.com/assets/bc689a4cf705a445.svg" } else { "https://discord.com/assets/6b1a461f35c05c7a.svg" }
+}
+
+#[cfg(test)]
+mod overlay_click_tests {
+    use super::{participants_pill, tray_icon};
+    use gpui::{Modifiers, div, point, prelude::*, px};
+    use std::cell::Cell;
+    use std::rc::Rc;
+
+    #[derive(Default)]
+    struct Hits {
+        tile: Cell<u32>,
+        tile_hover: Cell<bool>,
+        pill: Cell<u32>,
+        tray: Cell<u32>,
+    }
+
+    struct Scene(Rc<Hits>);
+
+    impl gpui::Render for Scene {
+        fn render(&mut self, _: &mut gpui::Window, _: &mut gpui::Context<Self>) -> impl IntoElement {
+            let (tile, hover, pill, tray) = (self.0.clone(), self.0.clone(), self.0.clone(), self.0.clone());
+            div()
+                .relative()
+                .size(px(400.))
+                .child(
+                    div()
+                        .id("tile")
+                        .absolute()
+                        .top_0()
+                        .left_0()
+                        .size(px(400.))
+                        .on_hover(move |h, _, _| hover.tile_hover.set(*h))
+                        .on_click(move |_, _, _| tile.tile.set(tile.tile.get() + 1)),
+                )
+                .child(
+                    div().absolute().left_0().right_0().top(px(100.)).flex().justify_center().child(
+                        div()
+                            .debug_selector(|| "pill".into())
+                            .child(participants_pill(false).on_click(move |_, _, _| pill.pill.set(pill.pill.get() + 1))),
+                    ),
+                )
+                .child(
+                    div().absolute().left(px(20.)).top(px(300.)).debug_selector(|| "tray".into()).child(
+                        tray_icon("tray", super::named("members", 24., gpui::white()), "tray".into()).on_click(move |_, _, _| tray.tray.set(tray.tray.get() + 1)),
+                    ),
+                )
+        }
+    }
+
+    #[gpui::test]
+    fn clicks_on_floating_call_buttons_never_reach_the_tile_behind(cx: &mut gpui::TestAppContext) {
+        let hits = Rc::new(Hits::default());
+        let h = hits.clone();
+        let (_, cx) = cx.add_window_view(move |_, _| Scene(h));
+        cx.run_until_parked();
+        let pill = cx.debug_bounds("pill").unwrap().center();
+        cx.simulate_mouse_move(point(px(380.), px(20.)), None, Modifiers::none());
+        assert!(hits.tile_hover.get());
+        cx.simulate_mouse_move(pill, None, Modifiers::none());
+        assert!(!hits.tile_hover.get());
+        cx.simulate_click(pill, Modifiers::none());
+        cx.simulate_click(pill, Modifiers::none());
+        assert_eq!((hits.pill.get(), hits.tile.get()), (2, 0));
+        let tray = cx.debug_bounds("tray").unwrap().center();
+        cx.simulate_click(tray, Modifiers::none());
+        assert_eq!((hits.tray.get(), hits.tile.get()), (1, 0));
+        cx.simulate_click(point(px(380.), px(20.)), Modifiers::none());
+        assert_eq!(hits.tile.get(), 1);
+    }
 }
 
 #[cfg(test)]
