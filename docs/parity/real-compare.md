@@ -984,4 +984,4 @@ so only the left part is compared, on the client shot cropped to the same box.
 
 Fixed: in a friend row the display name did not shrink (no `min-width: 0`), so a long name pushed the server tag out of
 the row. Client CSS `.userInfo_jPuNMC{display:flex;min-width:0}`, `.username_jPuNMC{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}`:
-the name ellipsizes (« ! Peдyaн Ịاlاه 마다… ») and the tag stays (`home/friends.rs`). Rail badges at 150 / 200 % now compared: ✅.
+the name ellipsizes (« ! Peдyaн Ịاlاه 마다… ») and the tag stays (`home/friends.rs`, 53bddccf). ❌ still open: after the merge a ~27 CSS px gap sits between the ellipsis and the tag (client ~5 px); the ellipsized name box keeps more width than its text. Rail badges at 150 / 200 % now compared: ✅.
