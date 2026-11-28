@@ -1000,7 +1000,7 @@ guild route during this pass, so nothing was navigated and these stay to do; Dis
 ### Login page and QR block (28/11 19:30)
 
 Desktop client logged out on purpose (user decision) and captured over CDP at 1280×700, dpr 1.5; Phoenix `views dark login-qr`
-at the same size (demo, fixed QR). Mean pixel score: full window 95.8 %, card 93.1 %. Same layout, artwork, logo, labels,
+at the same size (demo, fixed QR). Mean pixel score: full window 95.8 %, card 93.1 % (⚠ `views` before the zoom fix, see « Rescore of the `views` scores » below). Same layout, artwork, logo, labels,
 inputs, eye button, QR size and logo, texts and passkey link. Left difference: the Phoenix-only « Se connecter avec un
 jeton » link makes the form column 22 px taller, so the centered form sits about 10 px higher; the QR content differs by
 nature (other fingerprint). Details in `login.md`.
@@ -1008,7 +1008,7 @@ nature (other fingerprint). Details in `login.md`.
 ### Add Friend and quest bar, demo (28/11 20:45, int-bin c84a5910)
 
 `views dark friends-add` with `PHX_MOCK_QUEST=0.84` at 1280×700 (rendered at scale 2, downscaled to 1920×1050) against
-`dumps/vanilla-friends-addfriend.png` (23/11, dpr 1.5). Overall 54.3 % (title bar 5.4, rail 44.0, channel list 53.3, header 85.3, main 62.5, active now 48.9):
+`dumps/vanilla-friends-addfriend.png` (23/11, dpr 1.5). Overall ~~54.3 %~~ invalid (rendered at the user's 150 % zoom, see « Rescore of the `views` scores » below) (title bar 5.4, rail 44.0, channel list 53.3, header 85.3, main 62.5, active now 48.9):
 the score mostly counts the demo content against real data (DMs, rail, Active Now), and `compare.py` regions are channel
 regions, so it is not a layout score. The quest bar matches the live capture (`zoom28/client_friends150.png`): 70 px row, ring 42/3,
 title and subtitle. ❌ the reward art is not clipped round inside the ring (square corners show). Still not compared:
@@ -1028,3 +1028,18 @@ Scores are `mismatch_pct` (pixels differing by more than 24/255) on the region o
 | Keyboard combos (Ctrl+/) | `ref-cache/shortcuts-modal-default.json`, 1536×840 | card grid | geometry ✅ | first card 317,274, height 81, gap 24, four columns, `minmax(180px, max-content)`: card widths follow the label, so they differ only where the French labels are longer |
 | Quest bar (collapsed) | `zoom28/client_friends150.png`, 853×467 dpr 2.25 | bar 12,333 238×69 | **11.3** (975f698c) | ring, title, subtitle at the same place; fixed: the accepted bar sits on the post-enrollment background (`--home-background`, 90° gradient to `#CDD8FF1A`, 2 px `--background-mod-subtle` top border), it was base-lower (black in Onyx) |
 | Friends context menu, image viewer, server onboarding, voice messages | no client capture without navigating the CDP client | — | not scored | demo scenes `friends-menu`, `modal-viewer`, `modal-onboarding` render; voice messages stay as measured in `voice-messages.md` |
+
+### Rescore of the `views` scores (28/11 22:30, int-bin 8c01f1c5)
+
+Until 90334c0f the `views` example took the local zoom (150 %); the login scenes still did after it, because the zoom was
+only forced after the mock login (fixed in fa76e45e). Every score above that comes from a `views` render without
+`real_shots` was redone against the same client reference, window 1280×700 CSS at dpr 1.5. Mismatch = pixels off by more
+than 24/255, similarity = 100 − mean absolute difference.
+
+| View (date of the old score) | Reference | Old score | New score | Note |
+|---|---|---|---|---|
+| Login + QR (28/11 19:30) | `compare/login/ref.png` | 95.8 % similarity | 96.6 % similarity, 10.3 % mismatch (old render recomputed); 91.2 % / 26.7 % at scale 1 | the old render was made at window 1920×1050 scale 2 with the 150 % zoom, i.e. the right CSS size: score kept as valid. A plain `PHX_SCALE=1.5` render at 1280×700 came out 1.5× too large (78.6 %), hence fa76e45e |
+| Add Friend + quest bar (28/11 20:45) | `dumps/vanilla-friends-addfriend.png` | ~~54.3 %~~ invalid | Onyx FR: full window 19.5 % mismatch, section 446,82 444×302 16.8 % mismatch (Phoenix shifted 80 px, client sidebar 335 px) | full window counts the demo content; section ❌ > 10 %: heading drawn « AJOUTER » (`^upper` on 7815ae, client « Ajouter », d3788f24), intro ran under Wumpus (flex item without `min-width: 0`, client `.addFriendWumpusWrapper` `padding-inline-end: var(--space-128)`), username and note placeholders at 14 px instead of the inherited 16 px, note textarea padded (client `.friendNoteTextArea` `padding: 0`) (4756240a) |
+
+The 22:00 table above was already rendered after 90334c0f and is not affected.
+
