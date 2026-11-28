@@ -30,6 +30,9 @@ impl MentionResolver for Names<'_> {
     fn channel(&self, id: u64) -> Option<String> {
         self.0.channels.get(&Id(id)).map(|c| c.name.to_string())
     }
+    fn mention_channel(&self, id: u64) -> Option<crate::markdown::MentionChannel> {
+        self.0.resolver().mention_channel(id)
+    }
     fn role(&self, id: u64) -> Option<String> {
         self.0.roles.values().flatten().find(|r| r.id == Id(id)).map(|r| r.name.to_string())
     }

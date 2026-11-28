@@ -165,6 +165,7 @@ use crate::{grouping, markdown::{MentionResolver, SoundboardMention}, richtext::
 pub struct PageResolver {
     users: HashMap<u64, String>,
     channels: HashMap<u64, String>,
+    mention_channels: HashMap<u64, crate::markdown::MentionChannel>,
     roles: HashMap<u64, (String, Option<u32>, bool)>,
     sounds: HashMap<(u64, u64), SoundboardMention>,
     current_guild: Option<u64>,
@@ -178,6 +179,9 @@ impl MentionResolver for PageResolver {
     }
     fn channel(&self, id: u64) -> Option<String> {
         self.channels.get(&id).cloned()
+    }
+    fn mention_channel(&self, id: u64) -> Option<crate::markdown::MentionChannel> {
+        self.mention_channels.get(&id).copied()
     }
     fn role(&self, id: u64) -> Option<String> {
         self.roles.get(&id).map(|r| r.0.clone())
@@ -262,6 +266,9 @@ pub fn page_resolver(app: &PhoenixApp, msgs: &[Message]) -> PageResolver {
         if let Some(ch) = app.channels.get(&Id(id)) {
             out.channels.insert(id, ch.name.to_string());
         }
+        if let Some(mc) = resolver.mention_channel(id) {
+            out.mention_channels.insert(id, mc);
+        }
     }
     for id in r {
         let Some((g, role)) = app.roles.iter().find_map(|(g, rs)| rs.iter().find(|x| x.id.0 == id).map(|x| (*g, x))) else {
@@ -301,6 +308,9 @@ impl MentionResolver for MessagePageResolver<'_> {
     }
     fn channel(&self, id: u64) -> Option<String> {
         self.base.channel(id)
+    }
+    fn mention_channel(&self, id: u64) -> Option<crate::markdown::MentionChannel> {
+        self.base.mention_channel(id)
     }
     fn role(&self, id: u64) -> Option<String> {
         self.base.role(id)
