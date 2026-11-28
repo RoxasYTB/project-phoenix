@@ -61,7 +61,8 @@ pub mod voice;
 use std::sync::Arc;
 
 use gpui::{
-    App, AppContext, Bounds, TitlebarOptions, WindowBounds, WindowDecorations, WindowOptions, px, size,
+    App, AppContext, Bounds, Pixels, Size, TitlebarOptions, WindowBounds, WindowDecorations, WindowOptions, point, px,
+    size,
 };
 use gpui_component::{Root, theme::{Theme, ThemeMode}};
 
@@ -73,10 +74,26 @@ fn window_icon() -> Option<Arc<image::RgbaImage>> {
         .map(|i| Arc::new(i.to_rgba8()))
 }
 
+const RESTORED_SIZE: Size<Pixels> = Size { width: px(1280.), height: px(720.) };
+const MIN_SIZE: Size<Pixels> = Size { width: px(940.), height: px(500.) };
+
+fn main_window_bounds(display: Option<Bounds<Pixels>>) -> WindowBounds {
+    let Some(area) = display else {
+        return WindowBounds::Maximized(Bounds::new(point(px(0.), px(0.)), RESTORED_SIZE));
+    };
+    let restored = size(RESTORED_SIZE.width.min(area.size.width), RESTORED_SIZE.height.min(area.size.height));
+    let origin = point(
+        area.origin.x + (area.size.width - restored.width) * 0.5,
+        area.origin.y + (area.size.height - restored.height) * 0.5,
+    );
+    WindowBounds::Maximized(Bounds::new(origin, restored))
+}
+
 pub fn window_options(cx: &App) -> WindowOptions {
-    let bounds = Bounds::centered(None, size(px(1280.), px(720.)), cx);
+    let display = cx.primary_display();
     WindowOptions {
-        window_bounds: Some(WindowBounds::Windowed(bounds)),
+        window_bounds: Some(main_window_bounds(display.as_ref().map(|d| d.visible_bounds()))),
+        display_id: display.map(|d| d.id()),
         titlebar: Some(TitlebarOptions {
             title: Some("Discord Phoenix".into()),
             appears_transparent: true,
@@ -85,7 +102,7 @@ pub fn window_options(cx: &App) -> WindowOptions {
         window_decorations: Some(WindowDecorations::Client),
         app_id: Some(APP_ID.into()),
         icon: window_icon(),
-        window_min_size: Some(size(px(940.), px(500.))),
+        window_min_size: Some(MIN_SIZE),
         ..Default::default()
     }
 }
@@ -138,4 +155,30 @@ pub fn open_main_window(backend: Arc<dyn backend::Backend>, cx: &mut App) -> Opt
     })
     .ok()
     .map(Into::into)
+}
+
+#[cfg(test)]
+mod window_tests {
+    use super::*;
+
+    #[test]
+    fn main_window_opens_maximized_centered_on_primary() {
+        let area = Bounds::new(point(px(1920.), px(0.)), size(px(2560.), px(1400.)));
+        let WindowBounds::Maximized(b) = main_window_bounds(Some(area)) else { panic!("not maximized") };
+        assert_eq!(b.size, RESTORED_SIZE);
+        assert_eq!(b.origin, point(px(1920. + 640.), px(340.)));
+    }
+
+    #[test]
+    fn restored_size_fits_small_displays() {
+        let area = Bounds::new(point(px(0.), px(0.)), size(px(1024.), px(600.)));
+        let WindowBounds::Maximized(b) = main_window_bounds(Some(area)) else { panic!("not maximized") };
+        assert_eq!(b.size, size(px(1024.), px(600.)));
+        assert_eq!(b.origin, point(px(0.), px(0.)));
+    }
+
+    #[test]
+    fn maximized_without_display() {
+        assert!(matches!(main_window_bounds(None), WindowBounds::Maximized(_)));
+    }
 }

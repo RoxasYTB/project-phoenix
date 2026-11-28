@@ -95,3 +95,5 @@ Source: web bundle `GuildMediaStateStore.getGuildMediaState` and the badge facto
 | Muted guild | no badge unless the user is connected there | same | ✅ |
 | Connected guild | audio on, video = the voice channel has a camera on, screenshare = the current user's own stream (`getActiveStreamForUser(me, guild)`), green | same, own stream = `go_live::live` or own `self_stream` | ✅ |
 | Folder (collapsed) | only the selected voice guild: audio = !video, video, own screenshare, green | `folder_media` | ✅ |
+
+- ✅ (28/11) Main window opens maximized on the primary display (`WindowBounds::Maximized`, `display_id` = `cx.primary_display()`); un-maximizing restores 1280×720 (clamped to the visible area) centered on that display. No saved geometry overrides it. On Wayland gpui sends `set_maximized` before the first buffer, so no small-then-maximized flash. Call popout, overlay and splash unchanged.
