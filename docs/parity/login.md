@@ -1,3 +1,32 @@
+# Login page and QR block (28/11)
+
+Reference: the desktop client logged out on purpose (user decision, 28/11) and measured over CDP at 1280×700 CSS px,
+dpr 1.5; same DOM as `https://discord.com/login` rendered in an isolated headless Chromium (temporary profile, no input).
+Modules: `785161` (QR login, `useAuthWebsocket`), `141979` (`qrLogin_FDXpbQ` classes), `498206` (`authBox_rN1Ls3`),
+`534373` (`characterBackground__dBQf7`), `68281` (`mainLoginContainer_8bJOD9`), field status `715965`; CSS
+`461123.05982d946ffe8c79.css`, `332923.8b5cb2a40c7316db.css`, `448400.3c21419a2f308049.css`. Assets are loaded at runtime
+from the CDN, never committed: artwork `d8680b1c1576ecc8.svg` (1440×900, `xMinYMin slice`), logo `131c318dd45b7aa4.svg`
+(124×24 at 48,48), QR center `dd05fd1ea37e7747.png` (50×50).
+
+| Point | Client | Phoenix | State |
+|---|---|---|---|
+| Background | `<img class=artwork>` fixed, full window, SVG `slice` | `img(ARTWORK)` cover, gradient fallback while loading | ✅ |
+| Logo | `logoWithText` 124×24 at left 48, top 48 | same | ✅ |
+| Card | `authBoxExpanded` 784 wide, padding 32, `--modal-background`, radius 8, shadow `0 2px 10px rgba(0,0,0,.2)`, centered | same | ✅ |
+| Columns | form 416, gap 64, QR 240, both vertically centered (374 high) | same | ✅ |
+| Title / subtitle | 24/32 semibold `text-strong`; 16/20 `text-default`, mt 8; block mt 20 | same | ✅ |
+| Labels | `body-md/medium` 16/20 `text-strong`, sentence case (no more uppercase), `*` in `text-feedback-critical` ml 4, mb 8 | same, `^upper` removed from the mappings | ✅ |
+| Inputs | e-mail 44 high, password 40 high with an eye button 32 (icon 16, `EyeIcon` / `EyeSlashIcon`); bg `input-background-default`, 1 px `input-border-default`, hover `input-border-hover`, focus `input-border-active` + 2 px | same; the eye toggles the mask | ✅ |
+| Field error | under the control, gap 4: `CircleErrorIcon` xs + `body-xs/normal` `text-feedback-critical`; error colors on the field | same (`login`/`email` and `password` keys, 988dfc04) | ✅ |
+| Forgot / button / footer | link 14/18 `text-link` mt 4 mb 20; primary button 40 high, radius 8, 1 px `rgba(255,255,255,.08)`, 16/20 medium, mb 8; « Need an account? » 14/16 `text-muted` + link, mt 4 | same | ✅ |
+| Token login | not in the client | Phoenix link kept under the footer | ➖ Phoenix only |
+| QR box | `qrCodeContainer` 176×176 white, radius 4, padding 8, mb 32; QR level M, 37 modules on 160 px, no quiet zone, `image-rendering: pixelated`; logo 50×50 centered | same; level M (was L), modules painted on 160 px (was floored cells and a 28 px app icon on a white tile) | ✅ |
+| QR text | 24/32 semibold `text-strong` « Se connecter avec un code QR » (2 lines in 240); `body-md/normal` with bold « application mobile Discord »; « Ou connecte-toi avec une clé d'accès » 14/18 link in a padding-8 stack | same (`Qq+A6i ^bold`, `/kpMDt`) | ✅ (passkey click does nothing: WebAuthn ❌, see below) |
+| Loading | `INITIALIZING`: wandering cubes inside the white box | same (`spinner::spinner`) | ✅ |
+| Failure / expiry | no error state: socket close, timeout or failure go back to `INITIALIZING` and reconnect with backoff 1.5 s → 30 s; mobile cancel reconnects at once | same: `Unavailable` shows the spinner and retries (`next_backoff`); the raw error text and « Retry » are gone | ✅ |
+| Scanned | `PENDING_TICKET`: avatar 120 (mobile online status), « Regarde ton téléphone ! », « Connexion en tant que {username} », « Ce n'est pas moi, recommencer » `brand-500` mt 16 | avatar 120 from the decrypted user record (default avatar when none), texts and start over | ✅ (status dot ❌) |
+| Logging in | `PENDING_LOGIN` / `FINISH`: wandering cubes | spinner while the ticket is exchanged | ✅ |
+
 # Login: multi-factor authentication (A2F)
 
 Reference: client JS of 2026-11 (main bundle `web.b63d846b329d6470.js`, chunk 220813 `cf6841236b599214.js` = MFASlides,

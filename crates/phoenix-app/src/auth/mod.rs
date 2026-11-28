@@ -173,7 +173,7 @@ impl MfaFlow {
 #[derive(Clone, Debug, PartialEq)]
 pub enum RemoteAuthUpdate {
     Qr(String),
-    Scanned { username: String },
+    Scanned { username: String, avatar: String },
     Ended(Option<String>),
 }
 
@@ -187,7 +187,7 @@ pub enum QrState {
         modules: Vec<bool>,
         size: usize,
     },
-    Scanned(String),
+    Scanned { name: String, avatar: String },
     Unavailable(String),
 }
 
@@ -195,10 +195,30 @@ pub enum QrState {
 pub struct LoginUi {
     pub mfa: MfaFlow,
     pub qr: QrState,
+    pub qr_backoff_ms: u64,
+    pub qr_retry_gen: u64,
+    pub reveal_password: bool,
+}
+
+pub const QR_BACKOFF_MIN_MS: u64 = 1500;
+pub const QR_BACKOFF_MAX_MS: u64 = 30_000;
+
+pub fn next_backoff(prev: u64) -> u64 {
+    if prev == 0 { QR_BACKOFF_MIN_MS } else { (prev * 2).min(QR_BACKOFF_MAX_MS) }
+}
+
+pub fn scanned_avatar(user_id: &str, avatar: Option<&str>) -> String {
+    match avatar.filter(|a| !a.is_empty() && *a != "0") {
+        Some(hash) => format!("https://cdn.discordapp.com/avatars/{user_id}/{hash}.png?size=128"),
+        None => {
+            let ix = user_id.parse::<u64>().map_or(0, |id| (id >> 22) % 6);
+            format!("https://cdn.discordapp.com/embed/avatars/{ix}.png")
+        }
+    }
 }
 
 pub fn qr_matrix(url: &str) -> Option<(Vec<bool>, usize)> {
-    let code = qrcode::QrCode::with_error_correction_level(url, qrcode::EcLevel::L).ok()?;
+    let code = qrcode::QrCode::with_error_correction_level(url, qrcode::EcLevel::M).ok()?;
     let size = code.width();
     let modules = code.to_colors().into_iter().map(|c| c == qrcode::Color::Dark).collect();
     Some((modules, size))
@@ -232,21 +252,47 @@ fn finish(app: &mut PhoenixApp, res: Result<ReadyData, crate::backend::BackendEr
                 app.login_ui.qr = QrState::Idle;
             }
         }
-        Err(e) => app.login_ui.qr = QrState::Unavailable(e.0),
+        Err(e) => {
+            app.login_ui.qr = QrState::Unavailable(e.0);
+            schedule_qr_retry(app, cx);
+        }
     }
     cx.notify();
 }
 
-pub fn on_remote_auth(app: &mut PhoenixApp, u: RemoteAuthUpdate, _cx: &mut Context<PhoenixApp>) {
+fn schedule_qr_retry(app: &mut PhoenixApp, cx: &mut Context<PhoenixApp>) {
+    let delay = next_backoff(app.login_ui.qr_backoff_ms);
+    app.login_ui.qr_backoff_ms = delay;
+    app.login_ui.qr_retry_gen += 1;
+    let generation = app.login_ui.qr_retry_gen;
+    cx.spawn(async move |this, cx| {
+        cx.background_executor().timer(std::time::Duration::from_millis(delay)).await;
+        let _ = this.update(cx, |this, cx| {
+            if this.login_ui.qr_retry_gen == generation && matches!(this.login_ui.qr, QrState::Unavailable(_)) {
+                this.login_ui.qr = QrState::Idle;
+                cx.notify();
+            }
+        });
+    })
+    .detach();
+}
+
+pub fn on_remote_auth(app: &mut PhoenixApp, u: RemoteAuthUpdate, cx: &mut Context<PhoenixApp>) {
     app.login_ui.qr = match u {
         RemoteAuthUpdate::Qr(url) => match qr_matrix(&url) {
-            Some((modules, size)) => QrState::Code { url, modules, size },
+            Some((modules, size)) => {
+                app.login_ui.qr_backoff_ms = 0;
+                QrState::Code { url, modules, size }
+            }
             None => QrState::Unavailable("Could not draw the QR code.".into()),
         },
-        RemoteAuthUpdate::Scanned { username } => QrState::Scanned(username),
+        RemoteAuthUpdate::Scanned { username, avatar } => QrState::Scanned { name: username, avatar },
         RemoteAuthUpdate::Ended(Some(msg)) => QrState::Unavailable(msg),
         RemoteAuthUpdate::Ended(None) => return,
     };
+    if matches!(app.login_ui.qr, QrState::Unavailable(_)) {
+        schedule_qr_retry(app, cx);
+    }
 }
 
 pub fn retry_qr(app: &mut PhoenixApp, cx: &mut Context<PhoenixApp>) {
@@ -457,5 +503,25 @@ mod tests {
         assert_eq!(m.len(), n * n);
         assert!(n >= 21);
         assert!(m[0] && !m[n + 1] && m[2 * n + 2]);
+    }
+
+    #[test]
+    fn qr_matches_the_client_level_m_grid() {
+        let (_, n) = qr_matrix("https://discord.com/ra/abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG").unwrap();
+        assert_eq!(n, 37);
+    }
+
+    #[test]
+    fn qr_retry_backs_off_like_the_client() {
+        let mut d = 0;
+        let seq: Vec<u64> = (0..7).map(|_| { d = next_backoff(d); d }).collect();
+        assert_eq!(seq, vec![1500, 3000, 6000, 12_000, 24_000, 30_000, 30_000]);
+    }
+
+    #[test]
+    fn scanned_avatar_falls_back_to_the_default_avatar() {
+        assert_eq!(scanned_avatar("80351110224678912", Some("abc")), "https://cdn.discordapp.com/avatars/80351110224678912/abc.png?size=128");
+        assert_eq!(scanned_avatar("80351110224678912", None), format!("https://cdn.discordapp.com/embed/avatars/{}.png", (80351110224678912u64 >> 22) % 6));
+        assert!(scanned_avatar("1", Some("0")).contains("/embed/avatars/"));
     }
 }

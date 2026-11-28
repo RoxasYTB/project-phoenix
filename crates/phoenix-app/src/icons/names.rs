@@ -181,6 +181,7 @@ pub const MAP: &[(&str, &[&str])] = &[
     ("golive/screen", &["ScreenIcon"]),
     ("golive/window", &["BrowserIcon"]),
     ("deny", &["DenyIcon"]),
+    ("eye", &["EyeIcon"]),
     ("eye-slash", &["EyeSlashIcon"]),
     ("shop", &["ShopIcon"]),
     ("shop-sparkle", &["ShopSparkleIcon"]),

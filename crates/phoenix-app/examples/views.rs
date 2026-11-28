@@ -321,7 +321,7 @@ fn main() -> anyhow::Result<()> {
             "login-invalid" => "invalid@phoenix.demo",
             _ => "mfa@phoenix.demo",
         };
-        if scene != "login" {
+        if !scene.starts_with("login-qr") && scene != "login" {
             cx.update_window(win.into(), |_, window, cx| {
                 v.update(cx, |app, cx| {
                     app.login_email.update(cx, |s, cx| s.set_value(who, window, cx));
@@ -338,6 +338,15 @@ fn main() -> anyhow::Result<()> {
                     "login-mfa-select" => auth::set_slide(app, MfaSlide::Select, cx),
                     "login-mfa-backup" => auth::set_slide(app, MfaSlide::Backup, cx),
                     "login-mfa-backup-code" => auth::set_slide(app, MfaSlide::BackupAck, cx),
+                    "login-qr" => {
+                        if let Some((modules, size)) = auth::qr_matrix("https://discord.com/ra/PhoenixDemoFingerprintPhoenixDemoFingerprin") {
+                            app.login_ui.qr = auth::QrState::Code { url: String::new(), modules, size };
+                        }
+                    }
+                    "login-qr-scanned" => {
+                        app.login_ui.qr = auth::QrState::Scanned { name: "phoenix".into(), avatar: auth::scanned_avatar("80351110224678912", None) };
+                    }
+                    "login-qr-loading" => app.login_ui.qr = auth::QrState::Connecting,
                     "login-mfa-error" => {
                         app.login_mfa.update(cx, |s, cx| s.set_value("000000", window, cx));
                         auth::submit_mfa(app, cx);

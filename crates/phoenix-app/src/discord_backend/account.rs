@@ -108,8 +108,9 @@ impl DiscordBackend {
             while let Some(ev) = rx.recv().await {
                 match ev {
                     RemoteAuthEvent::Qr(url) => inner.emit(AppEvent::RemoteAuth(RemoteAuthUpdate::Qr(url))),
-                    RemoteAuthEvent::Scanned { username, .. } => {
-                        inner.emit(AppEvent::RemoteAuth(RemoteAuthUpdate::Scanned { username }))
+                    RemoteAuthEvent::Scanned { user_id, avatar, username, .. } => {
+                        let avatar = crate::auth::scanned_avatar(&user_id, avatar.as_deref());
+                        inner.emit(AppEvent::RemoteAuth(RemoteAuthUpdate::Scanned { username, avatar }))
                     }
                     RemoteAuthEvent::Token(t) => {
                         inner.remote_auth.lock().take();
