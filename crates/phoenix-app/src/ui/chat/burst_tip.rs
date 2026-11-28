@@ -352,7 +352,7 @@ pub fn layer(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message, r: &R
     });
     let card = div()
         .id(("reaction-tip", pill))
-        .max_w(z(MAX_W))
+        .max_w(z(MAX_W + 32.))
         .p(z(16.))
         .rounded(z(crate::theme::generated::global::RADIUS_XS))
         .overflow_hidden()
@@ -375,7 +375,7 @@ pub fn layer(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message, r: &R
         .children(super::reaction_emoji::block(app, entity, pill, &r.emoji));
     let top = f32::from(b.origin.y);
     let mid = f32::from(b.origin.x + b.size.width / 2.);
-    let span = f32::from(z(MAX_W + 32.));
+    let span = f32::from(z(MAX_W + 64.));
     let below = top < f32::from(z(ROOM));
     let frame = div().w(px(span)).flex().flex_col().items_center().child(card);
     let (corner, y) = if below { (gpui::Anchor::TopLeft, f32::from(b.origin.y + b.size.height) + f32::from(z(GAP))) } else { (gpui::Anchor::BottomLeft, top - f32::from(z(GAP))) };
