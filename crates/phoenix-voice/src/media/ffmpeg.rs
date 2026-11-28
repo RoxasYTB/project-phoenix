@@ -1,3 +1,4 @@
+use std::collections::VecDeque;
 use std::io::{Read, Write};
 use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::mpsc;
@@ -50,6 +51,29 @@ pub struct FfmpegH264 {
     rx: mpsc::Receiver<Vec<u8>>,
     config: VideoEncoderConfig,
     frames: u64,
+    pending: AccessUnitQueue,
+}
+
+#[derive(Default)]
+pub struct AccessUnitQueue {
+    pts: VecDeque<u64>,
+    units: VecDeque<Vec<u8>>,
+}
+
+impl AccessUnitQueue {
+    pub fn submitted(&mut self, pts_us: u64) {
+        self.pts.push_back(pts_us);
+    }
+
+    pub fn received(&mut self, au: Vec<u8>) {
+        self.units.push_back(au);
+    }
+
+    pub fn next(&mut self, fallback_pts: u64) -> Option<EncodedVideo> {
+        let data = self.units.pop_front()?;
+        let pts_us = self.pts.pop_front().unwrap_or(fallback_pts);
+        Some(EncodedVideo { codec: Codec::H264, keyframe: h264::is_keyframe(&data), data, pts_us })
+    }
 }
 
 impl FfmpegH264 {
@@ -97,7 +121,7 @@ impl FfmpegH264 {
                 }
             })
             .map_err(Error::Io)?;
-        Ok(Self { child, stdin, rx, config: config.clone(), frames: 0 })
+        Ok(Self { child, stdin, rx, config: config.clone(), frames: 0, pending: AccessUnitQueue::default() })
     }
 }
 
@@ -124,17 +148,11 @@ impl VideoEncoder for FfmpegH264 {
         let stdin = self.stdin.as_mut().ok_or(Error::Encoder("ffmpeg closed".into()))?;
         stdin.write_all(&frame.data).map_err(|e| Error::Encoder(format!("ffmpeg write: {e}")))?;
         self.frames += 1;
-        let mut latest: Option<Vec<u8>> = None;
+        self.pending.submitted(frame.pts_us);
         while let Ok(au) = self.rx.try_recv() {
-            latest = Some(match latest {
-                Some(mut prev) if !h264::is_keyframe(&au) => {
-                    prev.extend_from_slice(&au);
-                    prev
-                }
-                _ => au,
-            });
+            self.pending.received(au);
         }
-        Ok(latest.map(|data| EncodedVideo { codec: Codec::H264, keyframe: h264::is_keyframe(&data), data, pts_us: frame.pts_us }))
+        Ok(self.pending.next(frame.pts_us))
     }
 
     fn set_bitrate(&mut self, bps: u32) -> Result<()> {
@@ -633,6 +651,30 @@ mod tests {
         let f = decode_through_rtp(Codec::Vp8, &frames, (320, 180)).expect("vp8 decode");
         assert_eq!(f.height, 180);
         assert!((100..=102).contains(&f.width), "{}x{}", f.width, f.height);
+    }
+
+    #[test]
+    fn access_units_leave_one_at_a_time_with_their_own_timestamp() {
+        let mut q = AccessUnitQueue::default();
+        let idr = vec![0, 0, 0, 1, 9, 0x10, 0, 0, 0, 1, 0x67, 0x42, 0, 0, 0, 1, 0x68, 0xce, 0, 0, 0, 1, 0x65, 0x88];
+        let p1 = vec![0, 0, 0, 1, 9, 0x30, 0, 0, 0, 1, 0x41, 0x9a];
+        let p2 = vec![0, 0, 0, 1, 9, 0x30, 0, 0, 0, 1, 0x41, 0x9b];
+        q.submitted(0);
+        assert!(q.next(0).is_none());
+        q.submitted(33_000);
+        q.received(idr.clone());
+        q.submitted(66_000);
+        q.received(p1.clone());
+        q.received(p2.clone());
+        let a = q.next(66_000).unwrap();
+        assert!(a.keyframe);
+        assert_eq!((a.data, a.pts_us), (idr, 0));
+        let b = q.next(66_000).unwrap();
+        assert!(!b.keyframe);
+        assert_eq!((b.data, b.pts_us), (p1, 33_000));
+        let c = q.next(99_000).unwrap();
+        assert_eq!((c.data, c.pts_us), (p2, 66_000));
+        assert!(q.next(99_000).is_none());
     }
 
     #[test]

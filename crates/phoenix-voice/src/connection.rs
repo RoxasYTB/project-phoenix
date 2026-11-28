@@ -924,6 +924,17 @@ async fn run(
                             stats.video_keyframe_requests,
                             stats.video_decrypt_errors
                         );
+                        if media.as_ref().is_some_and(|m| m.video.is_some()) {
+                            eprintln!(
+                                "voice-send: stream={} video_packets_sent={} keyframes_sent={} keyframe_requests_received={} nacks_received={} rtx_sent={}",
+                                cfg.info.stream,
+                                stats.video_packets_sent,
+                                stats.video_keyframes_sent,
+                                stats.video_keyframe_requests_received,
+                                stats.video_nacks_received,
+                                stats.video_rtx_sent
+                            );
+                        }
                     }
                 }
             }
