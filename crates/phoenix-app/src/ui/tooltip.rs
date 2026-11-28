@@ -147,6 +147,31 @@ fn badge_card(b: BadgeTip) -> gpui::Div {
         )
 }
 
+pub fn caret_down() -> gpui::Div {
+    caret(true)
+}
+
+pub fn rich_card(content: gpui::Div) -> gpui::Div {
+    div()
+        .max_w(z(272.))
+        .px(z(12.))
+        .py(z(8.))
+        .rounded(z(8.))
+        .bg(c(tok(idx::BACKGROUND_SURFACE_HIGH)))
+        .border_1()
+        .border_color(c(tok(idx::BORDER_SUBTLE)))
+        .shadow(vec![gpui::BoxShadow {
+            color: gpui::hsla(0., 0., 0., 0.24),
+            offset: point(z(0.), z(12.)),
+            blur_radius: z(24.),
+            spread_radius: z(0.),
+            inset: false,
+        }])
+        .text_size(z(14.))
+        .line_height(z(18.))
+        .child(content)
+}
+
 fn card(body: Body) -> gpui::Div {
     let rich = matches!(body, Body::Badge(_));
     let (max_w, content) = match body {

@@ -1,7 +1,7 @@
 use crate::ui::tooltip::Tipped as _;
 use gpui::{
     AnyElement, App, Context, FontWeight, ListOffset, ParentElement, SharedString, Styled, div,
-    img, list, prelude::*, px,
+    img, list, prelude::*, px, Window,
 };
 
 use super::{Pickers, emoji, pick, types::GuildEmoji, with_app};
@@ -710,9 +710,99 @@ fn popular_badge() -> gpui::Div {
         )
 }
 
-pub fn burst_toggle(on: bool, cx: &mut Context<PhoenixApp>) -> AnyElement {
-    let label = if on { crate::t!("picker.burst_enabled") } else { crate::t!("picker.burst_enable") };
-    div()
+const BURST_EDU_KEY: &str = "super_reaction_toggle_education";
+const BURST_EDU_DELAY: std::time::Duration = std::time::Duration::from_millis(200);
+const BURST_SPRING: gpui::SpringConfig = gpui::SpringConfig::new(750., 70., 2.5);
+
+thread_local! {
+    static BURST_SPIN: std::cell::Cell<Option<(std::time::Instant, bool)>> = const { std::cell::Cell::new(None) };
+    static BURST_EDU: std::cell::Cell<Option<std::time::Instant>> = const { std::cell::Cell::new(None) };
+}
+
+pub fn reset_burst_education() {
+    BURST_EDU.with(|e| e.set(None));
+}
+
+pub fn burst_label(on: bool, premium: bool, edu: bool) -> SharedString {
+    if edu {
+        crate::t!("picker.burst_education_body")
+    } else if on && premium {
+        crate::t!("picker.burst_enabled")
+    } else {
+        crate::t!("picker.burst_enable")
+    }
+}
+
+pub fn burst_angle(spin: Option<(std::time::Instant, bool)>, now: std::time::Instant) -> (f32, bool) {
+    let Some((at, forward)) = spin else { return (0., false) };
+    let t = now.saturating_duration_since(at).as_secs_f32();
+    let done = t >= gpui::spring_settle_time(BURST_SPRING);
+    let p = if done { 1. } else { gpui::spring_progress(BURST_SPRING, t) };
+    let turn = if forward { p } else { 1. - p };
+    (turn * std::f32::consts::TAU, !done)
+}
+
+fn start_burst_education(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) {
+    if !app.backend.has_premium() || app.prefs.local.flag(BURST_EDU_KEY, false) || BURST_EDU.with(|e| e.get()).is_some() {
+        return;
+    }
+    BURST_EDU.with(|e| e.set(Some(std::time::Instant::now())));
+    cx.defer(|a, _| {
+        a.prefs.local.ui.insert(BURST_EDU_KEY.into(), 1);
+        a.prefs.local.save();
+    });
+    cx.spawn(async move |this, cx| {
+        cx.background_executor().timer(BURST_EDU_DELAY).await;
+        let _ = this.update(cx, |_, cx| cx.notify());
+    })
+    .detach();
+}
+
+fn education_tip() -> AnyElement {
+    let body = div()
+        .flex()
+        .items_center()
+        .gap(px(12.))
+        .child(gpui::svg().path(crate::icons::path("nitro")).size(px(20.)).flex_none().text_color(tk(idx::TEXT_DEFAULT)))
+        .child(
+            div()
+                .flex()
+                .flex_col()
+                .min_w_0()
+                .child(div().font_weight(FontWeight::MEDIUM).text_color(tk(idx::TEXT_DEFAULT)).child(crate::t!("picker.burst_education_title")))
+                .child(div().font_weight(FontWeight::NORMAL).text_color(tk(idx::TEXT_SUBTLE)).child(crate::t!("picker.burst_education_body"))),
+        );
+    let frame = div()
+        .w(px(240.))
+        .flex()
+        .flex_col()
+        .items_center()
+        .child(crate::ui::tooltip::rich_card(body))
+        .child(crate::ui::tooltip::caret_down());
+    gpui::deferred(
+        gpui::anchored()
+            .position_mode(gpui::AnchoredPositionMode::Local)
+            .anchor(gpui::Anchor::BottomLeft)
+            .position(gpui::point(px(16. - 120.), px(-6.)))
+            .child(frame),
+    )
+    .with_priority(2)
+    .into_any_element()
+}
+
+pub fn burst_toggle(app: &PhoenixApp, on: bool, window: &mut Window, cx: &mut Context<PhoenixApp>) -> AnyElement {
+    start_burst_education(app, cx);
+    let premium = app.backend.has_premium();
+    let now = std::time::Instant::now();
+    let edu = BURST_EDU.with(|e| e.get()).is_some_and(|at| now.saturating_duration_since(at) >= BURST_EDU_DELAY);
+    let label = burst_label(on, premium, edu);
+    let reduced = crate::ui::settings::effects::reduced_motion();
+    let (angle, moving) = if reduced { (0., false) } else { burst_angle(BURST_SPIN.with(|s| s.get()), now) };
+    if moving {
+        window.request_animation_frame();
+    }
+    let fg = if on { gpui::white() } else { tk(idx::TEXT_DEFAULT) };
+    let button = div()
         .id("burst-toggle")
         .flex_none()
         .size(px(32.))
@@ -721,16 +811,28 @@ pub fn burst_toggle(on: bool, cx: &mut Context<PhoenixApp>) -> AnyElement {
         .overflow_hidden()
         .cursor_pointer()
         .bg(tk(if on { idx::BRAND_500 } else { idx::BACKGROUND_BASE_LOWEST }))
-        .text_color(if on { gpui::white() } else { tk(idx::TEXT_DEFAULT) })
-        .tooltip(crate::ui::tooltip::tip(label))
+        .text_color(fg)
+        .when(!edu, |d| d.tooltip(crate::ui::tooltip::tip(label)))
         .on_click(cx.listener(|_, _, _, cx| {
+            let mut was = None;
             if let Some(op) = cx.global_mut::<Pickers>().open.as_mut() {
+                was = Some(op.burst);
                 op.burst = !op.burst;
             }
+            if let Some(was) = was {
+                BURST_SPIN.with(|s| s.set(Some((std::time::Instant::now(), !was))));
+            }
+            reset_burst_education();
             cx.notify();
         }))
-        .child(gpui::svg().path(crate::icons::path("super-reaction")).size(px(20.)).text_color(if on { gpui::white() } else { tk(idx::TEXT_DEFAULT) }))
-        .into_any_element()
+        .child(
+            gpui::svg()
+                .path(crate::icons::path("super-reaction"))
+                .size(px(20.))
+                .text_color(fg)
+                .with_transformation(gpui::Transformation::rotate(gpui::radians(angle))),
+        );
+    div().relative().flex_none().child(button).when(edu, |d| d.child(education_tip())).into_any_element()
 }
 
 pub fn tone_button(cx: &mut Context<PhoenixApp>) -> AnyElement {
@@ -797,6 +899,27 @@ pub fn tone_button(cx: &mut Context<PhoenixApp>) -> AnyElement {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_burst_icon_spins_a_full_turn_and_back() {
+        let t0 = std::time::Instant::now();
+        let late = t0 + std::time::Duration::from_secs(3);
+        assert_eq!(burst_angle(None, late), (0., false));
+        let (on, moving) = burst_angle(Some((t0, true)), late);
+        assert!(!moving);
+        assert!((on - std::f32::consts::TAU).abs() < 1e-3);
+        let (off, _) = burst_angle(Some((t0, false)), late);
+        assert!(off.abs() < 1e-3);
+        let (mid, moving) = burst_angle(Some((t0, true)), t0 + std::time::Duration::from_millis(60));
+        assert!(moving && mid > 0. && mid < std::f32::consts::TAU);
+    }
+
+    #[test]
+    fn the_burst_tooltip_follows_premium_and_education() {
+        assert_eq!(&*burst_label(true, false, false), &*crate::t!("picker.burst_enable"));
+        assert_eq!(&*burst_label(true, true, false), &*crate::t!("picker.burst_enabled"));
+        assert_eq!(&*burst_label(false, true, true), &*crate::t!("picker.burst_education_body"));
+    }
 
     fn grid_of(sizes: &[usize]) -> Grid {
         let mut g = Grid::default();

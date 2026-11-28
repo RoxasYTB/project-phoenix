@@ -48,6 +48,7 @@ pub fn user(u: &api::User) -> model::User {
         nameplate: u.nameplate().map(|(url, pal)| (url.into(), pal.as_deref().and_then(crate::ui::nameplate::palette_dark))),
         name_style: u.display_name_styles.as_ref().map(|s| (s.font_id, s.effect_id, s.colors.clone())),
         decoration: decoration_url(u),
+        flags: u.flags.unwrap_or(0),
     }
 }
 

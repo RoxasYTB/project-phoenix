@@ -433,6 +433,7 @@ impl PhoenixApp {
                 avatar: ImageRef::Default(0),
                 bot: false,
                 verified_bot: false,
+                flags: 0,
                 tag: None,
                 tag_guild: None,
                 nameplate: None,

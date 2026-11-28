@@ -193,6 +193,7 @@ pub fn open(app: &mut PhoenixApp, tab: Tab, target: EmojiTarget, window: &mut Wi
     let anchor = (!matches!(target, EmojiTarget::Composer)).then(|| window.mouse_position());
     let grid = grid::build(app, "", matches!(target, EmojiTarget::Reaction { .. }), cx);
     let list = ListState::new(grid.rows.len(), gpui::ListAlignment::Top, px(400.));
+    grid::reset_burst_education();
     cx.global_mut::<Pickers>().open = Some(OpenPicker {
         tab,
         target,
@@ -236,6 +237,7 @@ fn switch_tab(app: &mut PhoenixApp, tab: Tab, window: &mut Window, cx: &mut Cont
 
 pub fn close(app: &mut PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp>) {
     app.chat.emoji_target = None;
+    grid::reset_burst_education();
     if let Some(op) = cx.global_mut::<Pickers>().open.take() {
         let prefs = &mut cx.global_mut::<Pickers>().prefs;
         prefs.newly_commit();
@@ -670,7 +672,7 @@ fn render_picker(app: &PhoenixApp, window: &mut Window, cx: &mut Context<Phoenix
         .child(search_box(&input));
     if tab == Tab::Emoji {
         if matches!(target, EmojiTarget::Reaction { .. }) {
-            header = header.child(grid::burst_toggle(burst, cx));
+            header = header.child(grid::burst_toggle(app, burst, window, cx));
         }
         header = header.child(grid::tone_button(cx));
         if has_tabs {

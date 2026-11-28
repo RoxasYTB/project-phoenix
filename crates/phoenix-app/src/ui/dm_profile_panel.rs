@@ -393,6 +393,55 @@ fn incoming_request_card(app: &PhoenixApp, uid: Id, i: &Info, cx: &mut Context<P
     )
 }
 
+fn private_notice(i: &Info, uid: Id) -> Option<gpui::Stateful<Div>> {
+    if !i.prof.is_some_and(|p| p.private) {
+        return None;
+    }
+    Some(
+        overlay_card(("dm-panel-private", uid.0))
+            .p(z(12.))
+            .child(div().text_size(z(14.)).line_height(z(18.)).text_color(c(tok(idx::TEXT_DEFAULT))).child(crate::t!("dm_panel.private", name = i.display.clone()))),
+    )
+}
+
+fn provisional_notice(i: &Info, uid: Id) -> Option<gpui::Stateful<Div>> {
+    if !i.user.as_deref().is_some_and(|u| u.is_provisional()) {
+        return None;
+    }
+    let strong = c(tok(idx::TEXT_STRONG));
+    let body = crate::t!("dm_panel.provisional_body");
+    let more = crate::t!("dm_panel.provisional_learn_more");
+    let link = body.len()..body.len() + more.len();
+    let text = SharedString::from(format!("{body}{more}"));
+    Some(
+        overlay_card(("dm-panel-provisional", uid.0))
+            .gap(z(12.))
+            .p(z(8.))
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap(z(8.))
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap(z(4.))
+                            .text_color(strong)
+                            .child(div().text_size(z(12.)).line_height(z(16.)).font_weight(FontWeight::SEMIBOLD).child(crate::t!("dm_panel.provisional_title")))
+                            .child(svg().path(crate::icons::path("settings/circle-error")).size(z(12.)).flex_none().text_color(strong)),
+                    )
+                    .child(
+                        div()
+                            .text_size(z(14.))
+                            .line_height(z(18.))
+                            .text_color(c(tok(idx::TEXT_DEFAULT)))
+                            .child(gpui::StyledText::new(text).with_highlights([(link, gpui::HighlightStyle { color: Some(c(tok(idx::TEXT_LINK))), ..Default::default() })])),
+                    ),
+            ),
+    )
+}
+
 fn blocked_notice(app: &PhoenixApp, uid: Id, blocked: bool, ignored: bool, cx: &mut Context<PhoenixApp>) -> Option<gpui::Stateful<Div>> {
     let incoming = app.nav.relationship(uid).is_some_and(|r| r.kind == RelationshipKind::Incoming);
     let shown = blocked || (ignored && !incoming);
@@ -564,7 +613,9 @@ fn panel(app: &PhoenixApp, uid: Id, cx: &mut Context<PhoenixApp>) -> AnyElement 
                     .children(i.prof.and_then(|p| mutuals_row(p, uid, &cx.entity()))),
             )
             .children(incoming_request_card(app, uid, &i, cx))
-            .children(blocked_notice(app, uid, blocked, ignored, cx));
+            .children(blocked_notice(app, uid, blocked, ignored, cx))
+            .children(private_notice(&i, uid))
+            .children(provisional_notice(&i, uid));
         if let Some(b) = bio {
             let e2 = e.clone();
             body = body.child(

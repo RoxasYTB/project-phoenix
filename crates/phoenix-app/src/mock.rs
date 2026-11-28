@@ -85,6 +85,10 @@ pub fn now() -> i64 {
         .unwrap_or(0)
 }
 
+fn dm_peer_state() -> Option<String> {
+    std::env::var("PHX_MOCK_DM_PEER").ok()
+}
+
 fn user(i: usize) -> User {
     let p = &NAMES[i % NAMES.len()];
     let (n, d) = (p.name, p.display);
@@ -106,6 +110,7 @@ fn user(i: usize) -> User {
             _ => (i % 5 == 1).then(|| (17, 1, Vec::new())),
         },
         decoration: std::env::var("PHX_MOCK_DECO").ok().map(Into::into),
+        flags: if i == 1 && dm_peer_state().as_deref() == Some("provisional") { User::PROVISIONAL_ACCOUNT } else { 0 },
     }
 }
 
@@ -556,6 +561,16 @@ impl Backend for MockBackend {
         })
     }
 
+    fn user_profile(&self, user: Id, _guild: Option<Id>) -> BoxFuture<crate::presence::Profile> {
+        let private = user == Id(2) && dm_peer_state().as_deref() == Some("private");
+        Box::pin(async move {
+            if private {
+                Ok(crate::presence::Profile { user, private: true, created: 1_600_000_000, ..Default::default() })
+            } else {
+                Err(BackendError(crate::t!("backend.profiles_unavailable").to_string()))
+            }
+        })
+    }
     fn premium_tier2(&self) -> bool {
         std::env::var_os("PHX_NO_PREMIUM").is_none()
     }
@@ -644,10 +659,13 @@ impl Backend for MockBackend {
             Credentials::Password { login, password } => !login.is_empty() && !password.is_empty(),
         };
         if ok {
+            let peer = dm_peer_state();
             let rels: Vec<_> = (1..NAMES.len().min(15) as u64)
+                .filter(|n| *n != 1 || peer.is_none() || peer.as_deref() == Some("incoming"))
                 .map(|n| crate::ui::home::data::Relationship {
                     user: Id(n + 1),
                     kind: match n {
+                        1 if peer.as_deref() == Some("incoming") => crate::ui::home::data::RelationshipKind::Incoming,
                         12 => crate::ui::home::data::RelationshipKind::Incoming,
                         13 => crate::ui::home::data::RelationshipKind::Outgoing,
                         _ => crate::ui::home::data::RelationshipKind::Friend,

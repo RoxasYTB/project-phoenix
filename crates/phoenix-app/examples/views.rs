@@ -77,6 +77,12 @@ fn main() -> anyhow::Result<()> {
                     "status" => app.toggle_status_picker(window, cx),
                     "switcher" => app.open_switcher(window, cx),
                     "emoji" => pickers::open(app, pickers::Tab::Emoji, pickers::EmojiTarget::Composer, window, cx),
+                    "reaction" => {
+                        let g = app.guilds.first().map(|g| g.id);
+                        app.select_guild(g, cx);
+                        let channel = app.selected_channel.unwrap_or_default();
+                        pickers::open(app, pickers::Tab::Emoji, pickers::EmojiTarget::Reaction { channel, message: phoenix_app::model::Id(1) }, window, cx);
+                    }
                     "gif" => pickers::open(app, pickers::Tab::Gif, pickers::EmojiTarget::Composer, window, cx),
                     "sticker" => pickers::open(app, pickers::Tab::Sticker, pickers::EmojiTarget::Composer, window, cx),
                     "friends" => app.select_guild(None, cx),

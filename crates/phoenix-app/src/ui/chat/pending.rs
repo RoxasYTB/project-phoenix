@@ -186,6 +186,7 @@ impl PhoenixApp {
             avatar: ImageRef::Url(CLYDE_AVATAR.into()),
             bot: true,
             verified_bot: true,
+            flags: 0,
             tag: None,
             tag_guild: None,
             nameplate: None,

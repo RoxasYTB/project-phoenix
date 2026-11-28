@@ -31,6 +31,15 @@ pub struct User {
     pub nameplate: Option<(SharedString, Option<u32>)>,
     pub name_style: Option<(u32, u32, Vec<u32>)>,
     pub decoration: Option<SharedString>,
+    pub flags: u64,
+}
+
+impl User {
+    pub const PROVISIONAL_ACCOUNT: u64 = 1 << 23;
+
+    pub fn is_provisional(&self) -> bool {
+        self.flags & Self::PROVISIONAL_ACCOUNT != 0
+    }
 }
 
 #[derive(Clone, Debug)]

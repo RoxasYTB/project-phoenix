@@ -243,6 +243,7 @@ pub struct Profile {
     pub look_skus: Vec<u64>,
     pub discriminator: Option<SharedString>,
     pub connections: Vec<Connection>,
+    pub private: bool,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -489,6 +490,7 @@ pub fn profile_from_api(p: &phoenix_api::rest::profile::UserProfile, note: Strin
         look_skus: look_skus(p, fx),
         discriminator: Some(u.discriminator.as_str()).filter(|d| !d.is_empty() && *d != "0").map(|d| d.to_owned().into()),
         connections: parse_connections(p.extra.get("connected_accounts")),
+        private: p.extra.get("private").and_then(Value::as_bool).unwrap_or(false),
     }
 }
 
