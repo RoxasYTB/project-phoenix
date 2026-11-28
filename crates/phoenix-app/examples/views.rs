@@ -272,18 +272,28 @@ fn main() -> anyhow::Result<()> {
                 }
                 pump(&mut cx, 2);
             }
-            cx.update_window(win.into(), |_, _, cx| {
-                v.update(cx, |app, cx| {
-                    if let Some(ch) = app.selected_channel {
-                        let last = app.messages.get(&ch).and_then(|x| x.msgs.iter().rev().find(|m| !m.content.is_empty()).cloned());
-                        if let Some(mut m) = last {
-                            m.pinned = unpin;
-                            app.request_pin_message(ch, m, false, cx);
+            for _ in 0..10 {
+                cx.update_window(win.into(), |_, _, cx| {
+                    v.update(cx, |app, cx| {
+                        if app.chat.confirm_pin.is_some() {
+                            return;
                         }
-                    }
-                });
-            })?;
-            pump(&mut cx, 4);
+                        if let Some(ch) = app.selected_channel {
+                            let last = app.messages.get(&ch).and_then(|x| x.msgs.iter().rev().find(|m| !m.content.is_empty()).cloned());
+                            if let Some(mut m) = last {
+                                m.pinned = unpin;
+                                app.request_pin_message(ch, m, false, cx);
+                            }
+                        }
+                    });
+                })?;
+                pump(&mut cx, 6);
+                let state = cx.update_window(win.into(), |_, _, cx| {
+                    let app = v.read(cx);
+                    (app.selected_channel, app.chat.confirm_pin.as_ref().map(|(c, m)| (*c, m.id)))
+                })?;
+                eprintln!("views: pin scene channel={:?} confirm={:?}", state.0, state.1);
+            }
         }
         if scene == "post" {
             cx.update_window(win.into(), |_, window, cx| {
