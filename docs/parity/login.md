@@ -24,7 +24,7 @@ from the CDN, never committed: artwork `d8680b1c1576ecc8.svg` (1440×900, `xMinY
 | QR text | 24/32 semibold `text-strong` « Se connecter avec un code QR » (2 lines in 240); `body-md/normal` with bold « application mobile Discord »; « Ou connecte-toi avec une clé d'accès » 14/18 link in a padding-8 stack | same (`Qq+A6i ^bold`, `/kpMDt`) | ✅ (passkey click does nothing: WebAuthn ❌, see below) |
 | Loading | `INITIALIZING`: wandering cubes inside the white box | same (`spinner::spinner`) | ✅ |
 | Failure / expiry | no error state: socket close, timeout or failure go back to `INITIALIZING` and reconnect with backoff 1.5 s → 30 s; mobile cancel reconnects at once | same: `Unavailable` shows the spinner and retries (`next_backoff`); the raw error text and « Retry » are gone | ✅ |
-| Scanned | `PENDING_TICKET`: avatar 120 (mobile online status), « Regarde ton téléphone ! », « Connexion en tant que {username} », « Ce n'est pas moi, recommencer » `brand-500` mt 16 | avatar 120 from the decrypted user record (default avatar when none), texts and start over | ✅ (status dot ❌) |
+| Scanned | `PENDING_TICKET`: avatar 120 (mobile online status), « Regarde ton téléphone ! », « Connexion en tant que {username} », « Ce n'est pas moi, recommencer » `brand-500` mt 16 | avatar 120 from the decrypted user record (default avatar when none), texts and start over | ✅ mobile online status at 120 (24×36 icon in a rounded cut-out, `members::mobile_avatar_at`, client `status: ONLINE, isMobile: true`) |
 | Logging in | `PENDING_LOGIN` / `FINISH`: wandering cubes | spinner while the ticket is exchanged | ✅ |
 
 # Login: multi-factor authentication (A2F)
@@ -118,3 +118,10 @@ helper `extractCaptchaPropsFromResponse`):
 - Tests: `rest::auth::tests` (fingerprint, captcha replay headers, 50035 field errors, QR ticket retry),
   `captcha::tests` (escaping, local page round trip), `account::mfa_tests::invalid_form_body_*`.
   Demo: `views out.png dark login-invalid`.
+
+### 28/11 evening pass
+
+- Artwork: the client `img.artwork__dBQf7` is `object-fit: fill` over the viewport (headless `/login` at 1280×700 and 1600×900), so it stretches instead of covering; Phoenix now uses `ObjectFit::Fill`.
+- Window buttons: `title_bar::login_bar` draws them in the app; the `views` example did not force client decorations, so login renders lacked them. It now does for `login*` scenes.
+- Token link: `login::TOKEN_LINK_IN_CARD` (true). Set to false, the link only shows while the token form is open and Ctrl+Shift+T toggles it on the login screen (same binding as the main screen's group DM shortcut).
+- Passkey: the client calls `POST /auth/passwordless/start` → `{challenge, ticket}`, runs `navigator.credentials.get` (desktop: native `discord_webauthn` module, absent from the Linux install, so Chromium WebAuthn), then `POST /auth/conditional/finish {credential, ticket}`. On Linux a native client can only reach USB/NFC security keys over CTAP2 (hidraw); platform passkeys and phone hybrid (BLE caBLE) are not available. Not implemented; the link stays.

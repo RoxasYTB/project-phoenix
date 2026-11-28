@@ -15,6 +15,9 @@ fn main() -> anyhow::Result<()> {
     };
     let scene = args.next().unwrap_or_else(|| "appearance".into());
     let login_only = scene.starts_with("login");
+    if login_only {
+        phoenix_app::ui::title_bar::FORCE_CLIENT_DECORATIONS.store(true, std::sync::atomic::Ordering::Relaxed);
+    }
 
     let text = gpui_platform::current_platform(true).text_system();
     let mut cx = HeadlessAppContext::with_platform(text, Arc::new(Assets), || {
