@@ -20,8 +20,20 @@ pub fn report_menu(name: &str) -> ReportMenu {
     serde_json::from_str(&json).unwrap_or_default()
 }
 
-pub fn mock_emoji_source(id: u64) -> serde_json::Value {
-    let emojis: Vec<_> = (0..8u64).map(|i| serde_json::json!({ "id": (id + i).to_string(), "name": format!("phoenix_{i}"), "animated": false, "require_colons": true })).collect();
+const DEMO_SOURCE_EMOJIS: &[(&str, &str)] = &[
+    ("1107789271366119486", "ship_it"),
+    ("710971603328041050", "gamedev"),
+    ("758380151544217670", "greencheck"),
+    ("1107789262079918160", "coffee"),
+    ("1107789264135139509", "controller"),
+    ("1107789258695135243", "broom"),
+    ("1107789265645080716", "letter"),
+    ("1042545590640324608", "activedev"),
+    ("710970919736311942", "verified"),
+];
+
+pub fn mock_emoji_source(_id: u64) -> serde_json::Value {
+    let emojis: Vec<_> = DEMO_SOURCE_EMOJIS.iter().map(|(id, name)| serde_json::json!({ "id": id, "name": name, "animated": false, "require_colons": true })).collect();
     serde_json::json!({
         "type": "GUILD",
         "guild": { "id": "1374100000000000001", "name": "Phoenix Lounge", "icon": null, "features": ["DISCOVERABLE"], "approximate_presence_count": 1284, "emojis": emojis }
