@@ -4,7 +4,23 @@ use std::sync::Arc;
 
 use phoenix_app::{assets::Assets, backend::Backend, discord_backend::DiscordBackend, mock::MockBackend};
 
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
+unsafe extern "C" {
+    fn mallopt(param: i32, value: i32) -> i32;
+}
+
+fn limit_malloc_arenas() {
+    #[cfg(all(target_os = "linux", target_env = "gnu"))]
+    if std::env::var_os("MALLOC_ARENA_MAX").is_none() {
+        // SAFETY: called first in main, before any other thread exists; mallopt only adjusts glibc allocator tuning.
+        unsafe {
+            mallopt(-8, 2);
+        }
+    }
+}
+
 fn main() {
+    limit_malloc_arenas();
     phoenix_app::logging::init();
     phoenix_app::hwaccel::apply_at_startup();
     phoenix_app::actions::guard::set_writes_enabled(phoenix_app::ui::settings::LocalPrefs::load().protected_writes());
