@@ -13,6 +13,10 @@ use crate::ui::tooltip::Tipped as _;
 
 pub const PIP_W: f32 = 320.;
 pub const PIP_H: f32 = 180.;
+pub const MIN_W: f32 = 200.;
+pub const MAX_W: f32 = 960.;
+const RESIZE_SLACK: f32 = 20.;
+const WIDTH_STEP: f32 = 40.;
 pub const EDGE_TOP: f32 = 80.;
 pub const EDGE_BOTTOM: f32 = 132.;
 pub const EDGE_LEFT: f32 = 80.;
@@ -118,6 +122,7 @@ struct Motion {
     last_move: (f32, f32),
     last_move_ms: i64,
     velocity: (f32, f32),
+    resizing: Option<(f32, f32, f32)>,
 }
 
 impl Motion {
@@ -132,6 +137,7 @@ impl Motion {
             last_move: (0., 0.),
             last_move_ms: 0,
             velocity: (0., 0.),
+            resizing: None,
         }
     }
 
@@ -140,14 +146,111 @@ impl Motion {
     }
 }
 
+#[derive(Clone, Copy, PartialEq, Debug)]
+struct Saved {
+    corner: Corner,
+    width: f32,
+}
+
 thread_local! {
-    static CORNER: Cell<Corner> = const { Cell::new(Corner::BottomRight) };
+    static SAVED: Cell<Option<Saved>> = const { Cell::new(None) };
     static MOTION: Cell<Motion> = const { Cell::new(Motion::new()) };
     static EPOCH: std::time::Instant = std::time::Instant::now();
+    static CLOCK: Cell<Option<i64>> = const { Cell::new(None) };
+}
+
+pub fn freeze_clock(ms: Option<i64>) {
+    CLOCK.with(|c| c.set(ms));
 }
 
 fn now_ms() -> i64 {
-    EPOCH.with(|e| e.elapsed().as_millis() as i64)
+    CLOCK.with(Cell::get).unwrap_or_else(|| EPOCH.with(|e| e.elapsed().as_millis() as i64))
+}
+
+impl Corner {
+    fn key(self) -> &'static str {
+        match self {
+            Self::TopLeft => "topLeft",
+            Self::TopRight => "topRight",
+            Self::BottomLeft => "bottomLeft",
+            Self::BottomRight => "bottomRight",
+        }
+    }
+
+    fn from_key(key: &str) -> Option<Self> {
+        Some(match key {
+            "topLeft" => Self::TopLeft,
+            "topRight" => Self::TopRight,
+            "bottomLeft" => Self::BottomLeft,
+            "bottomRight" => Self::BottomRight,
+            _ => return None,
+        })
+    }
+
+    fn grows_left(self) -> bool {
+        matches!(self, Self::TopRight | Self::BottomRight)
+    }
+}
+
+fn store_path() -> Option<std::path::PathBuf> {
+    crate::paths::config_file("pip.json")
+}
+
+fn parse_saved(v: &serde_json::Value) -> Saved {
+    let corner = v.get("openPosition").and_then(|c| c.as_str()).and_then(Corner::from_key).unwrap_or(Corner::BottomRight);
+    let width = v
+        .get("pipWidths")
+        .and_then(|w| w.get("0"))
+        .and_then(serde_json::Value::as_f64)
+        .map_or(PIP_W, |w| (w as f32).clamp(MIN_W, MAX_W));
+    Saved { corner, width }
+}
+
+fn saved_json(s: Saved) -> serde_json::Value {
+    serde_json::json!({ "openPosition": s.corner.key(), "pipWidths": { "0": s.width, "1": 160 } })
+}
+
+fn saved() -> Saved {
+    if let Some(s) = SAVED.with(Cell::get) {
+        return s;
+    }
+    let s = store_path()
+        .and_then(|p| std::fs::read(p).ok())
+        .and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok())
+        .map_or(Saved { corner: Corner::BottomRight, width: PIP_W }, |v| parse_saved(&v));
+    SAVED.with(|c| c.set(Some(s)));
+    s
+}
+
+fn store(s: Saved) {
+    if SAVED.with(Cell::get) == Some(s) {
+        return;
+    }
+    SAVED.with(|c| c.set(Some(s)));
+    if CLOCK.with(Cell::get).is_some() {
+        return;
+    }
+    if let Some(p) = store_path()
+        && let Ok(data) = serde_json::to_vec(&saved_json(s))
+    {
+        if let Some(dir) = p.parent() {
+            let _ = std::fs::create_dir_all(dir);
+        }
+        let _ = std::fs::write(p, data);
+    }
+}
+
+pub fn width() -> f32 {
+    saved().width
+}
+
+pub fn height_for(width: f32) -> f32 {
+    width * 9. / 16.
+}
+
+pub fn snap_width(width: f32, max_x: f32) -> f32 {
+    let step = |w: f32| ((w / WIDTH_STEP).round() * WIDTH_STEP).clamp(MIN_W, MAX_W);
+    step(width).min(step(max_x - (EDGE_LEFT + EDGE_RIGHT)))
 }
 
 fn t(i: usize) -> Hsla {
@@ -155,31 +258,35 @@ fn t(i: usize) -> Hsla {
 }
 
 pub fn corner() -> Corner {
-    CORNER.with(Cell::get)
+    saved().corner
 }
 
 pub fn set_corner(corner: Corner) {
-    CORNER.with(|c| c.set(corner));
+    store(Saved { corner, ..saved() });
 }
 
-pub fn translate(x: f32, y: f32, vw: f32, vh: f32) -> (f32, f32) {
-    let x = if x < 0. { 0. } else if x > vw - PIP_W { vw - PIP_W } else { x };
-    let y = if y < 0. { 0. } else if y > vh - PIP_H { vh - PIP_H } else { y };
+pub fn set_width(width: f32) {
+    store(Saved { width, ..saved() });
+}
+
+pub fn translate(x: f32, y: f32, vw: f32, vh: f32, (w, h): (f32, f32)) -> (f32, f32) {
+    let x = if x < 0. { 0. } else if x > vw - w { vw - w } else { x };
+    let y = if y < 0. { 0. } else if y > vh - h { vh - h } else { y };
     (x, y)
 }
 
-pub fn corner_position(corner: Corner, vw: f32, vh: f32) -> (f32, f32) {
+pub fn corner_position(corner: Corner, vw: f32, vh: f32, (w, h): (f32, f32)) -> (f32, f32) {
     let top = EDGE_TOP.round();
-    let bottom = (vh - EDGE_BOTTOM - PIP_H).round();
+    let bottom = (vh - EDGE_BOTTOM - h).round();
     let left = EDGE_LEFT.round();
-    let right = (vw - EDGE_RIGHT - PIP_W).round();
+    let right = (vw - EDGE_RIGHT - w).round();
     let (x, y) = match corner {
         Corner::TopLeft => (left, top),
         Corner::TopRight => (right, top),
         Corner::BottomLeft => (left, bottom),
         Corner::BottomRight => (right, bottom),
     };
-    translate(x, y, vw, vh)
+    translate(x, y, vw, vh, (w, h))
 }
 
 pub fn release_corner(mouse: (f32, f32), velocity: (f32, f32), vw: f32, vh: f32) -> Corner {
@@ -286,22 +393,33 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
     let (user_id, is_stream) = select_subject(app, ch_id)?;
     let k = zoom();
     let vp = window.viewport_size();
-    let vw = f32::from(vp.width) / k;
+    let chat_w = if app.selected_channel == Some(ch_id) && crate::ui::call_view::chat_open(ch_id) {
+        crate::ui::call_view::CHAT_W
+    } else {
+        0.
+    };
+    let vw = f32::from(vp.width) / k - chat_w;
     let vh = f32::from(vp.height) / k;
 
     let mut motion = MOTION.with(Cell::get);
+    let fit = snap_width(MAX_W, vw);
+    if motion.resizing.is_none() && width() > fit {
+        set_width(fit);
+    }
+    let card_w = motion.resizing.map_or_else(width, |r| r.2);
+    let size = (card_w, height_for(card_w));
     if motion.animating() {
         let now = now_ms();
         motion.x.update(now);
         motion.y.update(now);
         if !motion.animating() && !motion.dragging {
-            let (x, y) = corner_position(corner(), vw, vh);
+            let (x, y) = corner_position(corner(), vw, vh, size);
             motion.x.set(f64::from(x));
             motion.y.set(f64::from(y));
         }
         window.request_animation_frame();
     } else if !motion.dragging {
-        let (x, y) = corner_position(corner(), vw, vh);
+        let (x, y) = corner_position(corner(), vw, vh, size);
         motion.x.set(f64::from(x));
         motion.y.set(f64::from(y));
     }
@@ -309,6 +427,8 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
     let (left, top) = (motion.x.pos as f32, motion.y.pos as f32);
     let pressed = motion.pressed;
     let dragging = motion.dragging;
+    let resizing = motion.resizing.is_some();
+    let cur_corner = corner();
 
     let me = user_id == app.me.id;
     let flags = crate::ui::voice_panel::flags(user_id);
@@ -341,7 +461,7 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
         && !me
         && let Some(key) = crate::ui::call_view::stream_key(app, user_id)
     {
-        let (pw, ph) = crate::ui::call_view::device_pixels(PIP_W * k, PIP_H * k, window.scale_factor());
+        let (pw, ph) = crate::ui::call_view::device_pixels(size.0 * k, size.1 * k, window.scale_factor());
         crate::voice::call::set_stream_view(&key, pw, ph);
     }
 
@@ -352,11 +472,7 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
     let card = div()
         .id("voice-pip-card")
         .group("pip-card")
-        .absolute()
-        .left(z(left))
-        .top(z(top))
-        .w(z(PIP_W))
-        .h(z(PIP_H))
+        .size_full()
         .rounded(z(8.))
         .overflow_hidden()
         .bg(if video.is_some() || is_stream {
@@ -539,20 +655,65 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
                 ),
         );
 
-    if pressed {
+    let handle = div()
+        .id("voice-pip-resize")
+        .absolute()
+        .size(z(20.))
+        .map(|d| match cur_corner {
+            Corner::BottomRight => d.top(z(-7.)).left(z(-7.)).cursor_nwse_resize(),
+            Corner::BottomLeft => d.top(z(-7.)).right(z(-7.)).cursor_nesw_resize(),
+            Corner::TopRight => d.bottom(z(-7.)).left(z(-7.)).cursor_nesw_resize(),
+            Corner::TopLeft => d.bottom(z(-7.)).right(z(-7.)).cursor_nwse_resize(),
+        })
+        .on_mouse_down(
+            MouseButton::Left,
+            cx.listener(move |_, ev: &gpui::MouseDownEvent, _, cx| {
+                let mx = f32::from(ev.position.x) / k;
+                MOTION.with(|m| {
+                    let mut st = m.get();
+                    st.resizing = Some((mx, card_w, card_w));
+                    m.set(st);
+                });
+                cx.stop_propagation();
+                cx.notify();
+            }),
+        );
+    let card = div()
+        .id("voice-pip-frame")
+        .absolute()
+        .left(z(left))
+        .top(z(top))
+        .w(z(size.0))
+        .h(z(size.1))
+        .child(card)
+        .child(handle);
+
+    if pressed || resizing {
         Some(
             div()
                 .id("voice-pip-drag-layer")
                 .absolute()
                 .inset_0()
                 .when(dragging, |d| d.cursor_grabbing())
+                .map(|d| match (resizing, cur_corner) {
+                    (false, _) => d,
+                    (true, Corner::BottomRight | Corner::TopLeft) => d.cursor_nwse_resize(),
+                    (true, _) => d.cursor_nesw_resize(),
+                })
                 .on_mouse_move(cx.listener(move |_, ev: &MouseMoveEvent, _, cx| {
                     let mut st = MOTION.with(Cell::get);
+                    let mx = f32::from(ev.position.x) / k;
+                    let my = f32::from(ev.position.y) / k;
+                    if let Some((start, start_w, _)) = st.resizing {
+                        let dx = if cur_corner.grows_left() { start - mx } else { mx - start };
+                        st.resizing = Some((start, start_w, (start_w + dx).clamp(MIN_W, MAX_W + RESIZE_SLACK)));
+                        MOTION.with(|m| m.set(st));
+                        cx.notify();
+                        return;
+                    }
                     if !st.pressed {
                         return;
                     }
-                    let mx = f32::from(ev.position.x) / k;
-                    let my = f32::from(ev.position.y) / k;
                     let now = now_ms();
                     if !st.dragging {
                         let dx = mx - st.drag_start.0;
@@ -565,7 +726,7 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
                         }
                     }
                     if st.dragging {
-                        let (x, y) = translate(mx - st.offset.0, my - st.offset.1, vw, vh);
+                        let (x, y) = translate(mx - st.offset.0, my - st.offset.1, vw, vh, size);
                         st.x.animate_to(f64::from(x), FOLLOW, now);
                         st.y.animate_to(f64::from(y), FOLLOW, now);
                         let dt = now - st.last_move_ms;
@@ -582,13 +743,19 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
                     MouseButton::Left,
                     cx.listener(move |a, ev: &MouseUpEvent, _, cx| {
                         let mut st = MOTION.with(Cell::get);
+                        if let Some((_, _, w)) = st.resizing.take() {
+                            set_width(snap_width(w, vw));
+                            MOTION.with(|m| m.set(st));
+                            cx.notify();
+                            return;
+                        }
                         st.pressed = false;
                         if st.dragging {
                             st.dragging = false;
                             let mouse = (f32::from(ev.position.x) / k, f32::from(ev.position.y) / k);
                             let corner = release_corner(mouse, st.velocity, vw, vh);
                             set_corner(corner);
-                            let (x, y) = corner_position(corner, vw, vh);
+                            let (x, y) = corner_position(corner, vw, vh, size);
                             let now = now_ms();
                             st.x.animate_to(f64::from(x), SETTLE, now);
                             st.y.animate_to(f64::from(y), SETTLE, now);
@@ -611,8 +778,8 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
 #[cfg(test)]
 mod tests {
     use super::{
-        Corner, EDGE_BOTTOM, EDGE_LEFT, EDGE_RIGHT, EDGE_TOP, FOLLOW, PIP_H, PIP_W, SETTLE, Spring, corner_position, release_corner,
-        translate,
+        Corner, EDGE_BOTTOM, EDGE_LEFT, EDGE_RIGHT, EDGE_TOP, FOLLOW, PIP_H, PIP_W, SETTLE, Spring, corner_position, height_for, parse_saved,
+        release_corner, saved_json, snap_width, translate,
     };
 
     fn run(origami: (f64, f64), samples: &[i64]) -> Vec<f64> {
@@ -694,18 +861,42 @@ mod tests {
         assert_eq!(release_corner((1000., 600.), (-2., -1.5), vw, vh), Corner::TopLeft);
     }
 
+    const SIZE: (f32, f32) = (PIP_W, PIP_H);
+
     #[test]
     fn corner_positions_use_client_edge_offsets() {
         let (vw, vh) = (1280., 800.);
-        assert_eq!(corner_position(Corner::TopLeft, vw, vh), (EDGE_LEFT, EDGE_TOP));
-        assert_eq!(corner_position(Corner::TopRight, vw, vh), (vw - EDGE_RIGHT - PIP_W, EDGE_TOP));
-        assert_eq!(corner_position(Corner::BottomLeft, vw, vh), (EDGE_LEFT, vh - EDGE_BOTTOM - PIP_H));
-        assert_eq!(corner_position(Corner::BottomRight, vw, vh), (vw - EDGE_RIGHT - PIP_W, vh - EDGE_BOTTOM - PIP_H));
+        assert_eq!(corner_position(Corner::TopLeft, vw, vh, SIZE), (EDGE_LEFT, EDGE_TOP));
+        assert_eq!(corner_position(Corner::TopRight, vw, vh, SIZE), (vw - EDGE_RIGHT - PIP_W, EDGE_TOP));
+        assert_eq!(corner_position(Corner::BottomLeft, vw, vh, SIZE), (EDGE_LEFT, vh - EDGE_BOTTOM - PIP_H));
+        assert_eq!(corner_position(Corner::BottomRight, vw, vh, SIZE), (vw - EDGE_RIGHT - PIP_W, vh - EDGE_BOTTOM - PIP_H));
+        assert_eq!(corner_position(Corner::BottomRight, vw, vh, (480., 270.)), (1280. - 80. - 480., 800. - 132. - 270.));
     }
 
     #[test]
     fn drag_is_clamped_to_the_window() {
-        assert_eq!(translate(-50., -10., 1280., 800.), (0., 0.));
-        assert_eq!(translate(2000., 2000., 1280., 800.), (1280. - PIP_W, 800. - PIP_H));
+        assert_eq!(translate(-50., -10., 1280., 800., SIZE), (0., 0.));
+        assert_eq!(translate(2000., 2000., 1280., 800., SIZE), (1280. - PIP_W, 800. - PIP_H));
+    }
+
+    #[test]
+    fn resize_snaps_to_40_px_steps_within_limits() {
+        assert_eq!(snap_width(337., 1280.), 320.);
+        assert_eq!(snap_width(341., 1280.), 360.);
+        assert_eq!(snap_width(150., 1280.), 200.);
+        assert_eq!(snap_width(980., 1280.), 960.);
+        assert_eq!(snap_width(960., 800.), 640.);
+        assert_eq!(height_for(480.), 270.);
+    }
+
+    #[test]
+    fn saved_state_uses_the_client_store_shape() {
+        let v = serde_json::json!({ "openPosition": "topLeft", "pipWidths": { "0": 520, "1": 160 } });
+        let s = parse_saved(&v);
+        assert_eq!((s.corner, s.width), (Corner::TopLeft, 520.));
+        assert_eq!(parse_saved(&saved_json(s)), s);
+        let d = parse_saved(&serde_json::json!({}));
+        assert_eq!((d.corner, d.width), (Corner::BottomRight, PIP_W));
+        assert!(Corner::TopRight.grows_left() && !Corner::BottomLeft.grows_left());
     }
 }

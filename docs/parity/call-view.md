@@ -389,9 +389,10 @@ Source: `web.b63d846b329d6470.js` module 457864 (`Draggable` class `E`, `Picture
 
 | item | client | Phoenix | status |
 |---|---|---|---|
-| default corner | `PictureInPictureStore` default position `BOTTOM_RIGHT`, persisted | `pip::CORNER` starts at `BottomRight` (session only) | ✅ ➖ not persisted across restarts |
-| size | width `fG[VIDEO]` = 320, `aspect-ratio: 16/9`, `border-radius: 8px`; resizable 200..960 snapped to 40 px steps (bottom/top inner corner handle) | 320 × 180, radius 8 | ✅ ➖ resize handle not implemented |
-| bounds | `maxX` = window width (minus the call chat sidebar when the voice channel is the selected channel and its chat is open), `maxY` = window height | viewport / zoom | ✅ ➖ chat sidebar width not subtracted |
+| default corner | `PictureInPictureStore` (persisted, key `PictureInPictureStore`, state `{openPosition, pipWidths: {0: VIDEO, 1: CAMERA_PREVIEW}}`), default `BOTTOM_RIGHT` / 320 / 160 | `pip.json` in the config dir with the same shape, loaded once, written on move and resize | ✅ |
+| size | width `fG[VIDEO]` = 320, `aspect-ratio: 16/9`, `border-radius: 8px` | `pip::width()`, height = width × 9 / 16 | ✅ |
+| resize | handle `resizeHandle_69M0s9` 20 × 20 at the inner corner, 7 px outside the card (BR: top/start −7, nwse; BL: top/end, nesw; TR: bottom/start, nesw; TL: bottom/end, nwse); orientation HORIZONTAL_LEFT on right corners, HORIZONTAL_RIGHT on left ones; live width clamped to 200..980 (`maxWidth + 20`); on release `g()` = round to 40 px, clamp 200..960; `ensureWidth` caps the width at `g(maxX − 160)` when the window shrinks; the corner stays anchored | `voice-pip-resize`, `snap_width` | ✅ ➖ the 0.2 s width transition after release is not animated |
+| bounds | `maxX` = window width minus `callChatSidebarWidth` when the voice channel is the selected channel and its chat is open, `maxY` = window height | same, with the fixed 480 px call chat width | ✅ |
 | edge offsets | `I = {top: 80, bottom: 132, left: 80, right: 80}`; corner = `round(top)`, `round(maxY - bottom - height)`, `round(left)`, `round(maxX - right - width)`, then clamped by `translate` | `EDGE_*`, `corner_position` | ✅ (was 16 / 48 inset) |
 | drag start | mouse down anywhere on the card (`dragAnywhere`), drag starts once squared distance > 9 (3 px) | `DRAG_THRESHOLD_SQ = 9` | ✅ (was 6 px) |
 | drag follow | every mousemove starts a spring to `cursor - grab offset` with `{tension: 80, friction: 8}` (origami → 375 / 25), clamped to `[0, maxX - w] × [0, maxY - h]`; the card lags and wobbles behind the cursor | `Spring::animate_to(.., FOLLOW)` per move, `translate` | ✅ (was glued to the cursor) |
@@ -401,6 +402,7 @@ Source: `web.b63d846b329d6470.js` module 457864 (`Draggable` class `E`, `Picture
 | window resize | `componentDidUpdate` on `maxX`/`maxY` → `ensureIsInPosition`: jumps (no animation) to the corner | idle card recomputes `corner_position` each render | ✅ |
 | reduced motion | the `animated` spring is used directly, no reduced-motion check in this path | same, no check | ✅ |
 | while dragging | card `pointer-events: none`, `cursor: grabbing`; the layer gets `.dragging` (full size, `cursor: grabbing`) | drag layer + card `cursor_grabbing` | ✅ |
+| offscreen proof | — | `call_view` example `pipdrag=<dir>`: freezes the PiP clock (`pip::freeze_clock`), drags with real mouse events to each corner and throws, one frame per 16 ms | ✅ |
 | click (no drag) | goes through to the PiP video's own click handler (return to the call) | `jump_to_call` | ✅ |
 ## Animated avatar while speaking (28/11)
 

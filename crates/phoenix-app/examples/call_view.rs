@@ -15,6 +15,7 @@ fn main() -> anyhow::Result<()> {
     let dm = rest.iter().any(|a| a == "dm");
     let toasts = rest.iter().any(|a| a == "toasts");
     let voice_only = rest.iter().any(|a| a == "voiceonly");
+    let pip_drag = rest.iter().find_map(|a| a.strip_prefix("pipdrag=").map(str::to_owned));
     let split = rest.iter().find_map(|a| a.strip_prefix("split=").and_then(|v| v.parse::<f32>().ok()));
     let feedback = rest.iter().find_map(|a| a.strip_prefix("feedback=").map(str::to_owned));
     let menu = rest.iter().find_map(|a| match a.as_str() {
@@ -175,6 +176,9 @@ fn main() -> anyhow::Result<()> {
                     };
                     phoenix_app::actions::open_modal(phoenix_app::ui::modals::Modal::StreamFeedback(st), None);
                 }
+                if pip_drag.is_some() {
+                    app.selected_channel = app.channels.values().find(|c| c.guild.is_some() && c.name.as_ref() == "general").map(|c| c.id);
+                }
                 if let Some(ix) = sub {
                     phoenix_app::ui::context_menu::debug_open_submenu(ix);
                 }
@@ -205,6 +209,68 @@ fn main() -> anyhow::Result<()> {
         println!("wrote {path}");
         Ok(())
     };
+    if let Some(dir) = pip_drag.as_deref() {
+        use phoenix_app::ui::pip::{self, Corner};
+        std::fs::create_dir_all(dir)?;
+        let send = |cx: &mut HeadlessAppContext, ev: gpui::PlatformInput| -> anyhow::Result<()> {
+            cx.update_window(win.into(), |_, window, cx| {
+                window.dispatch_event(ev, cx);
+            })?;
+            Ok(())
+        };
+        let mut clock = 1_000_i64;
+        let mut frame = 0_usize;
+        pip::freeze_clock(Some(clock));
+        let mut shot = |cx: &mut HeadlessAppContext| -> anyhow::Result<()> {
+            cx.update_window(win.into(), |_, window, _| window.refresh())?;
+            cx.run_until_parked();
+            let img = cx.capture_screenshot(win.into())?;
+            img.save(format!("{dir}/f{frame:04}.png"))?;
+            frame += 1;
+            Ok(())
+        };
+        let (vw, vh) = win_size;
+        let centre = |c: Corner| {
+            let (x, y) = pip::corner_position(c, vw, vh, (pip::PIP_W, pip::PIP_H));
+            (x + pip::PIP_W / 2., y + pip::PIP_H / 2.)
+        };
+        pip::set_corner(Corner::BottomRight);
+        pip::set_width(pip::PIP_W);
+        shot(&mut cx)?;
+        let scenarios = [
+            (Corner::BottomRight, (300., 250.), 500),
+            (Corner::TopLeft, (1000., 220.), 500),
+            (Corner::TopRight, (280., 600.), 500),
+            (Corner::BottomLeft, (1000., 600.), 500),
+            (Corner::BottomRight, (720., 430.), 110),
+        ];
+        let at = |x: f32, y: f32| gpui::point(px(x), px(y));
+        for (from, to, dur) in scenarios {
+            let start = centre(from);
+            send(&mut cx, gpui::PlatformInput::MouseDown(gpui::MouseDownEvent { button: gpui::MouseButton::Left, position: at(start.0, start.1), modifiers: gpui::Modifiers::default(), click_count: 1, first_mouse: false }))?;
+            cx.update_window(win.into(), |_, window, _| window.refresh())?;
+            cx.run_until_parked();
+            let steps = (dur as f32 / 16.).round() as usize;
+            let mut last = start;
+            for i in 1..=steps {
+                clock += 16;
+                pip::freeze_clock(Some(clock));
+                let u = i as f32 / steps as f32;
+                last = (start.0 + (to.0 - start.0) * u, start.1 + (to.1 - start.1) * u);
+                send(&mut cx, gpui::PlatformInput::MouseMove(gpui::MouseMoveEvent { position: at(last.0, last.1), pressed_button: Some(gpui::MouseButton::Left), modifiers: gpui::Modifiers::default() }))?;
+                shot(&mut cx)?;
+            }
+            send(&mut cx, gpui::PlatformInput::MouseUp(gpui::MouseUpEvent { button: gpui::MouseButton::Left, position: at(last.0, last.1), modifiers: gpui::Modifiers::default(), click_count: 1 }))?;
+            for _ in 0..80 {
+                clock += 16;
+                pip::freeze_clock(Some(clock));
+                shot(&mut cx)?;
+            }
+        }
+        pip::freeze_clock(None);
+        println!("wrote {frame} frames to {dir}");
+        return Ok(());
+    }
     if let Some(at) = point("PHX_MOUSE") {
         move_to(&mut cx, at)?;
         pump(&mut cx, 4);

@@ -1342,7 +1342,7 @@ fn participants_pill(open: bool) -> gpui::Stateful<gpui::Div> {
         .child(named("members", 24., white).mr(z(4.)))
 }
 
-const CHAT_W: f32 = 480.;
+pub const CHAT_W: f32 = 480.;
 const STREAM_PREVIEW_OPACITY: f32 = 0.15;
 
 fn header_icon(app: &PhoenixApp, ch: Id, stage: bool) -> &'static str {
