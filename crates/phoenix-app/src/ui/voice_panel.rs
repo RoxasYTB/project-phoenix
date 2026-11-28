@@ -1751,13 +1751,13 @@ pub fn speaking_avatar(user: Option<&crate::model::User>, size: f32, cdn: Option
     match user.map(|u| &u.avatar) {
         Some(crate::model::ImageRef::Url(url)) if crate::media::is_animated(url) => {
             let url = cdn.map_or_else(|| url.clone(), |s| crate::media::with_cdn_size(url, s));
-            let first = crate::media::lru::cached(gpui::img(speaking_avatar_src(&url, false))).size(px(size));
+            let first = crate::media::lru::cached(gpui::img(speaking_avatar_src(&url, false))).size(px(size)).rounded_full();
             let moving = play.then(|| {
                 let mut im = gpui::img(url.clone());
                 if let Some(cache) = crate::media::lru::chat() {
                     im = im.image_cache(&cache);
                 }
-                im.id(crate::media::anim_id(&url)).absolute().inset_0().size(px(size))
+                im.id(crate::media::anim_id(&url)).absolute().inset_0().size(px(size)).rounded_full()
             });
             div().relative().size(px(size)).flex_none().rounded_full().overflow_hidden().child(first).children(moving).into_any_element()
         }
