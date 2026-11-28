@@ -533,7 +533,7 @@ impl Backend for MockBackend {
         Some(p)
     }
     fn games(&self, ids: Vec<u64>) -> BoxFuture<Vec<crate::ui::profile_games::Game>> {
-        let games = ids.into_iter().filter(|i| *i == 50).map(|id| crate::ui::profile_games::Game { id, name: "Ferris Quest".into(), cover: None, icon: None }).collect();
+        let games = ids.into_iter().filter(|i| *i == 50).map(|id| crate::ui::profile_games::Game { id, name: "Ferris Quest".into(), cover: None, icon: Some(NAMES[5].avatar_url().into()) }).collect();
         Box::pin(async move { Ok(games) })
     }
     fn game_widgets(&self, _user: Id) -> BoxFuture<Vec<crate::ui::profile_games::GameWidget>> {

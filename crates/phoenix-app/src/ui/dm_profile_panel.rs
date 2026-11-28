@@ -432,13 +432,38 @@ pub fn game_request_text(name: &str, game: &str) -> (SharedString, Vec<std::ops:
     (body, bold)
 }
 
+pub fn sentence_words(body: &str, bold: &[std::ops::Range<usize>]) -> Vec<(usize, String, bool, bool)> {
+    let mut out = Vec::new();
+    let mut start = None;
+    for (ix, ch) in body.char_indices().chain(std::iter::once((body.len(), ' '))) {
+        let cut = ch == ' ' || bold.iter().any(|r| r.end == ix || (r.start == ix && ix > 0));
+        if cut && let Some(st) = start.take() {
+            let strong = bold.iter().any(|r| r.start <= st && st < r.end);
+            out.push((st, body[st..ix].to_string(), strong, ch == ' '));
+        }
+        if ch != ' ' && start.is_none() {
+            start = Some(ix);
+        }
+    }
+    out
+}
+
 fn game_request_cards(app: &PhoenixApp, uid: Id, i: &Info, cx: &mut Context<PhoenixApp>) -> Vec<gpui::Stateful<Div>> {
     let apps: Vec<Id> = app.nav.game_requests.iter().filter(|(u, _)| *u == uid).map(|(_, a)| *a).collect();
     let mut out = Vec::new();
     for a in apps {
         let Some(game) = game_app(app, a.0, cx) else { continue };
         let (body, bold) = game_request_text(&i.display, &game.name);
-        let text = gpui::StyledText::new(body).with_highlights(bold.into_iter().map(|r| (r, gpui::HighlightStyle { font_weight: Some(FontWeight::BOLD), ..Default::default() })));
+        let icon_at = body.find(game.name.as_ref()).unwrap_or(usize::MAX);
+        let mut text = div().flex().flex_wrap().items_end().text_size(z(14.)).line_height(z(18.)).text_color(c(tok(idx::TEXT_DEFAULT)));
+        for (start, word, strong, spaced) in sentence_words(&body, &bold) {
+            if start == icon_at
+                && let Some(u) = game.icon.clone()
+            {
+                text = text.child(img(u).size(z(16.)).mb(z(1.)).mr(z(4.)).rounded(z(4.)).flex_none());
+            }
+            text = text.child(div().when(spaced, |d| d.mr(z(4.))).when(strong, |d| d.font_weight(FontWeight::BOLD)).child(word));
+        }
         let write = |accept: bool| {
             let (uid, a) = (uid, a);
             cx.listener(move |p: &mut PhoenixApp, _: &gpui::ClickEvent, _, cx| {
@@ -459,7 +484,7 @@ fn game_request_cards(app: &PhoenixApp, uid: Id, i: &Info, cx: &mut Context<Phoe
                 .gap(z(8.))
                 .px(z(12.))
                 .py(z(10.))
-                .child(div().text_size(z(14.)).line_height(z(18.)).text_color(c(tok(idx::TEXT_DEFAULT))).child(text))
+                .child(text)
                 .child(div().flex().items_center().gap(z(8.)).child(primary).child(secondary)),
         );
     }
@@ -813,6 +838,16 @@ mod tests {
         assert_eq!(body.as_ref(), "Wumpus sent you a Game Friend request from Ferris Quest.");
         let parts: Vec<&str> = bold.iter().map(|r| &body[r.clone()]).collect();
         assert_eq!(parts, ["Wumpus", "Game Friend", "Ferris Quest"]);
+    }
+
+    #[test]
+    fn game_request_words_keep_bold_runs_and_glue_the_full_stop() {
+        let (body, bold) = game_request_text("Wumpus", "Ferris Quest");
+        let words = sentence_words(&body, &bold);
+        let strong: Vec<&str> = words.iter().filter(|w| w.2).map(|w| w.1.as_str()).collect();
+        assert_eq!(strong, ["Wumpus", "Game", "Friend", "Ferris", "Quest"]);
+        let tail: Vec<(&str, bool)> = words.iter().rev().take(2).map(|w| (w.1.as_str(), w.3)).collect();
+        assert_eq!(tail, [(".", true), ("Quest", false)]);
     }
 
     fn act(kind: ActivityKind, name: &str, app: Option<&str>) -> Activity {
