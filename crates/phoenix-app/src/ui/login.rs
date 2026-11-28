@@ -11,6 +11,15 @@ use crate::{
     theme::{Palette, c, generated::idx, tok, z},
 };
 
+pub const TOKEN_LINK_IN_CARD: bool = true;
+
+pub fn toggle_token(a: &mut PhoenixApp, cx: &mut Context<PhoenixApp>) {
+    a.login_with_token = !a.login_with_token;
+    a.login_mfa_step = false;
+    a.login_error = None;
+    cx.notify();
+}
+
 pub const ARTWORK: &str = "https://discord.com/assets/d8680b1c1576ecc8.svg";
 pub const LOGO: &str = "https://discord.com/assets/131c318dd45b7aa4.svg";
 pub const QR_LOGO: &str = "https://discord.com/assets/dd05fd1ea37e7747.png";
@@ -108,7 +117,7 @@ fn backdrop() -> gpui::Div {
             gpui::linear_color_stop(c(0x1C0C6B), 0.),
             gpui::linear_color_stop(c(0x0B7FF5), 1.),
         ))
-        .child(img(ARTWORK).absolute().top_0().left_0().size_full().object_fit(ObjectFit::Cover))
+        .child(img(ARTWORK).absolute().top_0().left_0().size_full().object_fit(ObjectFit::Fill))
         .child(img(LOGO).absolute().top(z(48.)).left(z(48.)).w(z(124.)).h(z(24.)))
 }
 
@@ -244,12 +253,8 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
         if app.login_with_token { crate::t!("login.with_email") } else { crate::t!("login.with_token") },
     )
     .mt(z(4.))
-    .on_click(cx.listener(|a, _, _, cx| {
-        a.login_with_token = !a.login_with_token;
-        a.login_mfa_step = false;
-        a.login_error = None;
-        cx.notify();
-    }));
+    .on_click(cx.listener(|a, _, _, cx| toggle_token(a, cx)));
+    let show_toggle = TOKEN_LINK_IN_CARD || app.login_with_token;
     let form = div()
         .w(z(FORM_W))
         .flex_none()
@@ -257,7 +262,7 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
         .flex_col()
         .justify_center()
         .child(header)
-        .child(div().mt(z(20.)).flex().flex_col().child(fields).child(submit).child(footer).child(div().flex().child(toggle)));
+        .child(div().mt(z(20.)).flex().flex_col().child(fields).child(submit).child(footer).when(show_toggle, |d| d.child(div().flex().child(toggle))));
 
     backdrop()
         .child(
@@ -324,7 +329,7 @@ fn qr_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement 
     let col = div().w(z(QR_W)).flex_none().flex().flex_col().items_center().justify_center();
     match &app.login_ui.qr {
         QrState::Scanned { name, avatar } => col
-            .child(div().mb(z(32.)).child(crate::ui::avatar_ref(crate::model::ImageRef::Url(avatar.clone().into()), 120.)))
+            .child(div().mb(z(32.)).child(crate::ui::members::mobile_avatar_at(crate::ui::avatar_ref(crate::model::ImageRef::Url(avatar.clone().into()), 120.), 120.)))
             .child(qr_heading(crate::t!("login.check_phone")))
             .child(
                 div()

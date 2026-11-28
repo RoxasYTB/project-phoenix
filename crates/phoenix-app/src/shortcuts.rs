@@ -602,7 +602,13 @@ pub fn handlers(app: &PhoenixApp, root: Stateful<gpui::Div>, window: &gpui::Wind
     }))
     .on_action(cx.listener(|a, _: &MarkServerRead, _, cx| a.mark_server_read_shortcut(cx)))
     .on_action(cx.listener(|a, _: &CreateGuild, w, cx| a.open_join_server(w, cx)))
-    .on_action(cx.listener(|a, _: &CreateGroupDm, _, cx| a.open_group_dm_picker(cx)))
+    .on_action(cx.listener(|a, _: &CreateGroupDm, _, cx| {
+        if a.screen == crate::app::Screen::Login {
+            crate::ui::login::toggle_token(a, cx);
+        } else {
+            a.open_group_dm_picker(cx);
+        }
+    }))
     .on_action(cx.listener(|a, _: &CopyChannelLink, _, cx| a.copy_channel_link(cx)))
     .on_action(cx.listener(|a, _: &MarkInboxRead, _, cx| a.mark_inbox_read(cx)))
     .on_action(cx.listener(|a, _: &CallDm, _, cx| a.call_current_dm(cx)))
