@@ -747,11 +747,11 @@ fn start_burst_education(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) {
         return;
     }
     BURST_EDU.with(|e| e.set(Some(std::time::Instant::now())));
-    cx.defer(|a, _| {
-        a.prefs.local.ui.insert(BURST_EDU_KEY.into(), 1);
-        a.prefs.local.save();
-    });
     cx.spawn(async move |this, cx| {
+        let _ = this.update(cx, |a, _| {
+            a.prefs.local.ui.insert(BURST_EDU_KEY.into(), 1);
+            a.prefs.local.save();
+        });
         cx.background_executor().timer(BURST_EDU_DELAY).await;
         let _ = this.update(cx, |_, cx| cx.notify());
     })
