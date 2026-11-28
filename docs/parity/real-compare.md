@@ -1004,3 +1004,13 @@ at the same size (demo, fixed QR). Mean pixel score: full window 95.8 %, card 93
 inputs, eye button, QR size and logo, texts and passkey link. Left difference: the Phoenix-only « Se connecter avec un
 jeton » link makes the form column 22 px taller, so the centered form sits about 10 px higher; the QR content differs by
 nature (other fingerprint). Details in `login.md`.
+
+### Add Friend and quest bar, demo (28/11 20:45, int-bin c84a5910)
+
+`views dark friends-add` with `PHX_MOCK_QUEST=0.84` at 1280×700 (rendered at scale 2, downscaled to 1920×1050) against
+`dumps/vanilla-friends-addfriend.png` (23/11, dpr 1.5). Overall 54.3 % (title bar 5.4, rail 44.0, channel list 53.3, header 85.3, main 62.5, active now 48.9):
+the score mostly counts the demo content against real data (DMs, rail, Active Now), and `compare.py` regions are channel
+regions, so it is not a layout score. The quest bar matches the live capture (`zoom28/client_friends150.png`): 70 px row, ring 42/3,
+title and subtitle. ❌ the reward art is not clipped round inside the ring (square corners show). Still not compared:
+keybinds modal, Friends context menus, image viewer, voice messages, report modal, server onboarding (no client reference
+reachable without navigating the CDP client, and real sessions were off limits for this pass).
