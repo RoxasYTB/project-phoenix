@@ -996,3 +996,11 @@ page (`shortcuts.md`), voice messages (`voice-messages.md`), report modal (`repo
 account panel (« Quête terminée à 84 % », `containerQuestBarVisible_g6VwXp`, shown on Friends only, not implemented).
 Ack-free in the client: Add Friend, Keybinds, context menus on a Friends row, Quest bar. The client sat on the user's own
 guild route during this pass, so nothing was navigated and these stay to do; Discover was already scored in sweeps 3 and 4.
+
+### Login page and QR block (28/11 19:30)
+
+Desktop client logged out on purpose (user decision) and captured over CDP at 1280×700, dpr 1.5; Phoenix `views dark login-qr`
+at the same size (demo, fixed QR). Mean pixel score: full window 95.8 %, card 93.1 %. Same layout, artwork, logo, labels,
+inputs, eye button, QR size and logo, texts and passkey link. Left difference: the Phoenix-only « Se connecter avec un
+jeton » link makes the form column 22 px taller, so the centered form sits about 10 px higher; the QR content differs by
+nature (other fingerprint). Details in `login.md`.
