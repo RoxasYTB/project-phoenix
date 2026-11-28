@@ -1856,6 +1856,7 @@ fn main() -> anyhow::Result<()> {
                     app.toggle_status_picker(window, cx);
                     phoenix_app::ui::status_picker::debug_open_status_submenu(arg == "sub");
                     phoenix_app::ui::status_picker::debug_open_accounts_submenu(arg == "accounts");
+                    phoenix_app::ui::status_picker::debug_open_wallet(arg == "wallet");
                 }
                 "accounts" => app.open_switch_accounts(cx),
                 "gdmclean" => app.open_gdm_cleanup(cx),
