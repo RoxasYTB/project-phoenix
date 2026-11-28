@@ -92,6 +92,12 @@ fn main() -> anyhow::Result<()> {
                     "gif" => pickers::open(app, pickers::Tab::Gif, pickers::EmojiTarget::Composer, window, cx),
                     "sticker" => pickers::open(app, pickers::Tab::Sticker, pickers::EmojiTarget::Composer, window, cx),
                     "friends" => app.select_guild(None, cx),
+                    "friends-menu" => {
+                        app.select_guild(None, cx);
+                        if let Some(u) = app.users.keys().copied().find(|u| *u != app.me.id) {
+                            phoenix_app::ui::user_menu::open(u, None, gpui::point(gpui::px(700.), gpui::px(160.)), window);
+                        }
+                    }
                     "friends-all" | "friends-pending" | "friends-add" => {
                         app.select_guild(None, cx);
                         app.nav.friends_tab = match scene.as_str() {
@@ -135,6 +141,34 @@ fn main() -> anyhow::Result<()> {
                             "poll" => {
                                 if let Some(ch) = ch {
                                     phoenix_app::actions::open_modal(Modal::CreatePoll(modals::poll_create::State::new(ch)), Some(&mut *window));
+                                }
+                            }
+                            "report-message" => {
+                                if let Some(ch) = ch {
+                                    let id = app.messages.get(&ch).and_then(|x| x.msgs.last()).map(|m| m.id);
+                                    if let Some(id) = id {
+                                        app.open_report(
+                                            phoenix_api::rest::reporting::ReportTarget::Message { channel: phoenix_api::models::Snowflake(ch.0), message: phoenix_api::models::Snowflake(id.0) },
+                                            cx,
+                                        );
+                                    }
+                                }
+                            }
+                            "viewer" => {
+                                let url: gpui::SharedString = "https://cdn.discordapp.com/embed/avatars/0.png".into();
+                                phoenix_app::media::open_viewer(
+                                    phoenix_app::media::ViewerImage { url: url.clone(), original: url, filename: "0.png".into(), width: 256, height: 256, author: None, video: None },
+                                    cx,
+                                );
+                            }
+                            "onboarding" => {
+                                if let Some(g) = g {
+                                    let v = serde_json::json!({"guild_id": g.0.to_string(), "enabled": true, "prompts": [
+                                        {"id": "1", "title": "What brings you here?", "single_select": false, "required": true, "options": [
+                                            {"id": "11", "title": "Rust", "description": "Talk about the client"},
+                                            {"id": "12", "title": "Design", "description": "Pixels and parity"},
+                                            {"id": "13", "title": "Testing"}]}]});
+                                    phoenix_app::ui::join_flow::open_onboarding_preview(g, phoenix_app::ui::join_flow::parse_onboarding(&v), cx);
                                 }
                             }
                             "report" => app.open_report(phoenix_api::rest::reporting::ReportTarget::Guild { guild: phoenix_api::models::Snowflake(g.map_or(1, |g| g.0)) }, cx),
