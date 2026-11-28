@@ -2859,6 +2859,36 @@ fn main() -> anyhow::Result<()> {
                 shoot(&mut cx, &format!("{stem}-k{i}.png"))?;
                 continue;
             }
+            if key == "~pins" {
+                cx.update_window(win.into(), |_, _, cx| v.update(cx, |app, cx| app.toggle_pins(cx)))?;
+                pump(&mut cx, 1500);
+                shoot(&mut cx, &format!("{stem}-k{i}.png"))?;
+                continue;
+            }
+            if let Some((shift, at)) = key.strip_prefix("~click:").map(|a| (false, a)).or_else(|| key.strip_prefix("~sclick:").map(|a| (true, a)))
+                && let Some((x, y)) = at.split_once(',').and_then(|(x, y)| Some((x.parse::<f32>().ok()?, y.parse::<f32>().ok()?)))
+            {
+                let modifiers = gpui::Modifiers { shift, ..Default::default() };
+                cx.update_window(win.into(), |_, window, cx| {
+                    let k = window.page_zoom();
+                    let position = gpui::point(px(x) * k, px(y) * k);
+                    window.dispatch_event(gpui::PlatformInput::MouseMove(gpui::MouseMoveEvent { position, pressed_button: None, modifiers }), cx);
+                })?;
+                pump(&mut cx, 300);
+                cx.update_window(win.into(), |_, window, cx| {
+                    let k = window.page_zoom();
+                    let position = gpui::point(px(x) * k, px(y) * k);
+                    window.dispatch_event(
+                        gpui::PlatformInput::MouseDown(gpui::MouseDownEvent { button: gpui::MouseButton::Left, position, modifiers, click_count: 1, first_mouse: false }),
+                        cx,
+                    );
+                    window.dispatch_event(gpui::PlatformInput::MouseUp(gpui::MouseUpEvent { button: gpui::MouseButton::Left, position, modifiers, click_count: 1 }), cx);
+                })?;
+                pump(&mut cx, 1500);
+                println!("click {key}");
+                shoot(&mut cx, &format!("{stem}-k{i}.png"))?;
+                continue;
+            }
             let action: Option<Box<dyn gpui::Action>> = match key {
                 "!pageup" => Some(Box::new(phoenix_app::shortcuts::PageUp)),
                 "!pagedown" => Some(Box::new(phoenix_app::shortcuts::PageDown)),
