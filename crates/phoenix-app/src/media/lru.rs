@@ -231,7 +231,7 @@ pub fn deferred(child: impl IntoElement) -> gpui::Deferred {
 
 pub fn deferred_full(child: impl IntoElement) -> gpui::Deferred {
     match chat() {
-        Some(cache) => gpui::deferred(gpui::image_cache(cache).size_full().child(child)),
+        Some(cache) => gpui::deferred(gpui::image_cache(cache).absolute().top_0().left_0().size_full().child(child)),
         None => gpui::deferred(child),
     }
 }

@@ -289,11 +289,6 @@ fn main() -> anyhow::Result<()> {
                     });
                 })?;
                 pump(&mut cx, 6);
-                let state = cx.update_window(win.into(), |_, _, cx| {
-                    let app = v.read(cx);
-                    (app.selected_channel, app.chat.confirm_pin.as_ref().map(|(c, m)| (*c, m.id)))
-                })?;
-                eprintln!("views: pin scene channel={:?} confirm={:?}", state.0, state.1);
             }
         }
         if scene == "post" {

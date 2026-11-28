@@ -701,3 +701,32 @@ fn wheel_and_touchpad_scroll_the_chat_from_its_bottom(cx: &mut TestAppContext) {
     assert!(after > 40., "a wheel notch left the chat {after} px from its end");
     assert!(!h.read(|a| a.chat.at_bottom), "the jump to present bar must follow the wheel");
 }
+
+#[gpui::test]
+fn pin_and_delete_confirm_modals_are_drawn_inside_the_window(cx: &mut TestAppContext) {
+    let mut h = setup(cx);
+    h.vcx.update(|_, cx| crate::media::lru::init(cx));
+    let ch = h.channels[0];
+    let vp = h.vcx.update(|w, _| w.viewport_size());
+    let inside = |b: Bounds<Pixels>| b.size.width > px(0.) && b.size.height > px(0.) && b.origin.y >= px(0.) && b.origin.y + b.size.height <= vp.height;
+    for unpin in [false, true] {
+        h.act(|a, _, cx| {
+            let mut m = a.messages[&ch].msgs.iter().rev().find(|m| !m.content.is_empty()).cloned().unwrap();
+            m.pinned = unpin;
+            a.request_pin_message(ch, m, false, cx);
+        });
+        let b = h.bounds("modal-card");
+        assert!(inside(b), "pin modal at {b:?} outside {vp:?}");
+        h.act(|a, _, cx| {
+            a.chat.confirm_pin = None;
+            cx.notify();
+        });
+    }
+    h.act(|a, _, cx| {
+        let id = a.messages[&ch].msgs.last().unwrap().id;
+        a.chat.confirm_delete = Some((ch, id));
+        cx.notify();
+    });
+    let b = h.bounds("modal-card");
+    assert!(inside(b), "delete modal at {b:?} outside {vp:?}");
+}

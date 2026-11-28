@@ -41,7 +41,7 @@ pub fn frame_named(id: &'static str, label: Option<SharedString>, on_cancel: Act
             .child(crate::ui::popout_motion::modal_card(
                 id,
                 crate::ui::focus_ring::trap_modal(
-                    crate::ui::a11y::role(div().id("modal-card"), gpui::Role::Dialog)
+                    crate::ui::a11y::role(div().id("modal-card").debug_selector(|| "modal-card".into()), gpui::Role::Dialog)
                         .when_some(label.filter(|_| crate::ui::a11y::on()), |d, l| d.aria_label(l))
                         .occlude()
                         .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation()),
