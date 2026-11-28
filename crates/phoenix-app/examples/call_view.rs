@@ -236,6 +236,73 @@ fn main() -> anyhow::Result<()> {
         };
         pip::set_corner(Corner::BottomRight);
         pip::set_width(pip::PIP_W);
+        let script: serde_json::Value = match std::env::var("PHX_PIP_SCRIPT") {
+            Ok(path) => serde_json::from_slice(&std::fs::read(path)?)?,
+            Err(_) => serde_json::json!({ "fps": 60, "scenarios": [] }),
+        };
+        let fps = script["fps"].as_f64().unwrap_or(60.);
+        let at = |x: f32, y: f32| gpui::point(px(x), px(y));
+        let corner_of = |name: &str| match name {
+            "TL" => Corner::TopLeft,
+            "TR" => Corner::TopRight,
+            "BL" => Corner::BottomLeft,
+            _ => Corner::BottomRight,
+        };
+        let mut log = Vec::new();
+        let mut tick = 0_i64;
+        let t0 = clock;
+        let empty = Vec::new();
+        for sc in script["scenarios"].as_array().unwrap_or(&empty) {
+            pip::set_corner(corner_of(sc["start"].as_str().unwrap_or("BR")));
+            pip::freeze_clock(Some(clock));
+            cx.update_window(win.into(), |_, window, _| window.refresh())?;
+            cx.run_until_parked();
+            let path: Vec<(f32, f32, f32)> = sc["path"]
+                .as_array()
+                .unwrap_or(&empty)
+                .iter()
+                .filter_map(|p| Some((p[0].as_f64()? as f32, p[1].as_f64()? as f32, p[2].as_f64()? as f32)))
+                .collect();
+            let Some(&first) = path.first() else { continue };
+            let grab = if sc["grab"].as_str() == Some("centre") { centre(pip::corner()) } else { (first.0, first.1) };
+            let offset = (grab.0 - first.0, grab.1 - first.1);
+            send(&mut cx, gpui::PlatformInput::MouseDown(gpui::MouseDownEvent { button: gpui::MouseButton::Left, position: at(grab.0, grab.1), modifiers: gpui::Modifiers::default(), click_count: 1, first_mouse: false }))?;
+            cx.update_window(win.into(), |_, window, _| window.refresh())?;
+            cx.run_until_parked();
+            let start_tick = tick;
+            let end_ms = path.last().map_or(0., |p| p.2);
+            let after = sc["after"].as_f64().unwrap_or(1500.) as f32;
+            let mut released = false;
+            let mut mouse = grab;
+            loop {
+                tick += 1;
+                let ms = ((tick - start_tick) as f64 * 1000. / fps) as f32;
+                clock = t0 + (tick as f64 * 1000. / fps).round() as i64;
+                pip::freeze_clock(Some(clock));
+                if ms <= end_ms {
+                    let j = path.iter().rposition(|p| p.2 <= ms).unwrap_or(0).min(path.len().saturating_sub(2));
+                    let (p, q) = (path[j], path[(j + 1).min(path.len() - 1)]);
+                    let u = if q.2 > p.2 { ((ms - p.2) / (q.2 - p.2)).clamp(0., 1.) } else { 1. };
+                    mouse = (p.0 + (q.0 - p.0) * u + offset.0, p.1 + (q.1 - p.1) * u + offset.1);
+                    send(&mut cx, gpui::PlatformInput::MouseMove(gpui::MouseMoveEvent { position: at(mouse.0, mouse.1), pressed_button: Some(gpui::MouseButton::Left), modifiers: gpui::Modifiers::default() }))?;
+                } else if !released {
+                    released = true;
+                    send(&mut cx, gpui::PlatformInput::MouseUp(gpui::MouseUpEvent { button: gpui::MouseButton::Left, position: at(mouse.0, mouse.1), modifiers: gpui::Modifiers::default(), click_count: 1 }))?;
+                }
+                shot(&mut cx)?;
+                let (cx_, cy_) = pip::position();
+                log.push(serde_json::json!({ "ms": clock - t0, "mouse": [mouse.0, mouse.1], "card": [cx_, cy_], "down": !released, "label": sc["label"] }));
+                if ms > end_ms + after {
+                    break;
+                }
+            }
+        }
+        if script["scenarios"].as_array().is_some_and(|a| !a.is_empty()) {
+            std::fs::write(format!("{dir}/frames.json"), serde_json::to_vec(&log)?)?;
+            pip::freeze_clock(None);
+            println!("wrote {} frames to {dir}", log.len());
+            return Ok(());
+        }
         shot(&mut cx)?;
         let scenarios = [
             (Corner::BottomRight, (300., 250.), 500),
