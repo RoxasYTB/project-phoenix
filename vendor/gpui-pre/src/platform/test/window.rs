@@ -246,6 +246,10 @@ impl TestWindow {
         self.0.lock().resize_callback = Some(callback);
     }
 
+    pub(crate) fn set_scale_factor(&self, scale_factor: f32) {
+        self.0.lock().scale_factor = scale_factor;
+    }
+
     /// Simulates a display scale change through the resize callback, preserving logical bounds.
     pub fn simulate_scale_factor_change(&mut self, scale_factor: f32) {
         let size = {

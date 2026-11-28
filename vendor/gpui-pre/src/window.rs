@@ -3429,6 +3429,12 @@ impl Window {
     #[cfg(any(test, feature = "test-support"))]
     pub fn set_scale_factor(&mut self, scale_factor: f32) {
         self.platform_scale_factor = scale_factor;
+        // PHOENIX PATCH (headless capture): the test window sizes its render target from its
+        // own scale factor, which stayed at 2.0, so captures at 1.5 / 2.25 / 3 were cropped
+        // or padded to twice the logical size.
+        if let Some(test_window) = self.platform_window.as_test() {
+            test_window.set_scale_factor(scale_factor);
+        }
         self.apply_page_zoom();
         self.refresh();
     }
