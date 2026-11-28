@@ -393,6 +393,79 @@ fn incoming_request_card(app: &PhoenixApp, uid: Id, i: &Info, cx: &mut Context<P
     )
 }
 
+pub const PROVISIONAL_ARTICLE: &str = "29667419799063";
+
+fn provisional_article_url() -> String {
+    format!("https://support.discord.com/hc/{}/articles/{PROVISIONAL_ARTICLE}", crate::i18n::locale().to_lowercase())
+}
+
+thread_local! {
+    static GAME_APPS: std::cell::RefCell<std::collections::HashMap<u64, Option<crate::ui::profile_games::Game>>> = Default::default();
+}
+
+fn game_app(app: &PhoenixApp, id: u64, cx: &mut Context<PhoenixApp>) -> Option<crate::ui::profile_games::Game> {
+    if id == 0 {
+        return None;
+    }
+    if let Some(g) = GAME_APPS.with(|m| m.borrow().get(&id).cloned()) {
+        return g;
+    }
+    GAME_APPS.with(|m| m.borrow_mut().insert(id, None));
+    let fut = app.backend.games(vec![id]);
+    cx.spawn(async move |this, cx| {
+        let game = fut.await.ok().and_then(|v| v.into_iter().find(|g| g.id == id));
+        if game.is_some() {
+            GAME_APPS.with(|m| m.borrow_mut().insert(id, game));
+            let _ = this.update(cx, |_, cx| cx.notify());
+        }
+    })
+    .detach();
+    None
+}
+
+pub fn game_request_text(name: &str, game: &str) -> (SharedString, Vec<std::ops::Range<usize>>) {
+    let friend = crate::t!("dm_panel.game_friend");
+    let body = crate::t!("dm_panel.game_request", name = name.to_string(), friend = friend.to_string(), app = game.to_string());
+    let mut bold: Vec<_> = [name, friend.as_ref(), game].iter().filter_map(|n| crate::ui::modals::channel_perms::bold_range(&body, n)).collect();
+    bold.sort_by_key(|r| r.start);
+    bold.dedup_by(|b, a| b.start < a.end);
+    (body, bold)
+}
+
+fn game_request_cards(app: &PhoenixApp, uid: Id, i: &Info, cx: &mut Context<PhoenixApp>) -> Vec<gpui::Stateful<Div>> {
+    let apps: Vec<Id> = app.nav.game_requests.iter().filter(|(u, _)| *u == uid).map(|(_, a)| *a).collect();
+    let mut out = Vec::new();
+    for a in apps {
+        let Some(game) = game_app(app, a.0, cx) else { continue };
+        let (body, bold) = game_request_text(&i.display, &game.name);
+        let text = gpui::StyledText::new(body).with_highlights(bold.into_iter().map(|r| (r, gpui::HighlightStyle { font_weight: Some(FontWeight::BOLD), ..Default::default() })));
+        let write = |accept: bool| {
+            let (uid, a) = (uid, a);
+            cx.listener(move |p: &mut PhoenixApp, _: &gpui::ClickEvent, _, cx| {
+                cx.stop_propagation();
+                let w = if accept {
+                    crate::actions::guard::GuardedWrite::accept_game_friend(uid.0, a.0)
+                } else {
+                    crate::actions::guard::GuardedWrite::remove_game_relationship(uid.0, a.0)
+                };
+                p.blocked_write(w, cx);
+            })
+        };
+        let key = (uid.0 << 8) ^ a.0;
+        let primary = mana_button(("dm-panel-game-accept", key), crate::t!("friends.accept"), true, false).line_height(z(18.)).on_click(write(true));
+        let secondary = mana_button(("dm-panel-game-ignore", key), crate::t!("friends.ignore"), false, false).line_height(z(18.)).on_click(write(false));
+        out.push(
+            overlay_card(("dm-panel-game-request", key))
+                .gap(z(8.))
+                .px(z(12.))
+                .py(z(10.))
+                .child(div().text_size(z(14.)).line_height(z(18.)).text_color(c(tok(idx::TEXT_DEFAULT))).child(text))
+                .child(div().flex().items_center().gap(z(8.)).child(primary).child(secondary)),
+        );
+    }
+    out
+}
+
 fn private_notice(i: &Info, uid: Id) -> Option<gpui::Stateful<Div>> {
     if !i.prof.is_some_and(|p| p.private) {
         return None;
@@ -404,14 +477,22 @@ fn private_notice(i: &Info, uid: Id) -> Option<gpui::Stateful<Div>> {
     )
 }
 
-fn provisional_notice(i: &Info, uid: Id) -> Option<gpui::Stateful<Div>> {
+fn provisional_notice(app: &PhoenixApp, i: &Info, uid: Id, cx: &mut Context<PhoenixApp>) -> Option<gpui::Stateful<Div>> {
     if !i.user.as_deref().is_some_and(|u| u.is_provisional()) {
         return None;
     }
     let strong = c(tok(idx::TEXT_STRONG));
-    let body = crate::t!("dm_panel.provisional_body");
+    let game = app.nav.game_requests.iter().find(|(u, _)| *u == uid).and_then(|(_, a)| game_app(app, a.0, cx));
+    let body = match &game {
+        Some(g) => crate::t!("dm_panel.provisional_body_app", app = g.name.clone()),
+        None => crate::t!("dm_panel.provisional_body"),
+    };
     let more = crate::t!("dm_panel.provisional_learn_more");
     let link = body.len()..body.len() + more.len();
+    let mut highlights = vec![(link.clone(), gpui::HighlightStyle { color: Some(c(tok(idx::TEXT_LINK))), ..Default::default() })];
+    if let Some(r) = game.as_ref().and_then(|g| crate::ui::modals::channel_perms::bold_range(&body, &g.name)) {
+        highlights.insert(0, (r, gpui::HighlightStyle { font_weight: Some(FontWeight::BOLD), ..Default::default() }));
+    }
     let text = SharedString::from(format!("{body}{more}"));
     Some(
         overlay_card(("dm-panel-provisional", uid.0))
@@ -433,10 +514,13 @@ fn provisional_notice(i: &Info, uid: Id) -> Option<gpui::Stateful<Div>> {
                     )
                     .child(
                         div()
-                            .text_size(z(14.))
-                            .line_height(z(18.))
+                            .text_size(z(12.))
+                            .line_height(z(16.))
                             .text_color(c(tok(idx::TEXT_DEFAULT)))
-                            .child(gpui::StyledText::new(text).with_highlights([(link, gpui::HighlightStyle { color: Some(c(tok(idx::TEXT_LINK))), ..Default::default() })])),
+                            .child(
+                                gpui::InteractiveText::new(("dm-panel-provisional-text", uid.0), gpui::StyledText::new(text).with_highlights(highlights))
+                                    .on_click(vec![link], |_, _, cx| cx.open_url(&provisional_article_url())),
+                            ),
                     ),
             ),
     )
@@ -614,9 +698,10 @@ fn panel(app: &PhoenixApp, uid: Id, cx: &mut Context<PhoenixApp>) -> AnyElement 
                     .children(i.prof.and_then(|p| mutuals_row(p, uid, app, &cx.entity()))),
             )
             .children(incoming_request_card(app, uid, &i, cx))
+            .children(game_request_cards(app, uid, &i, cx))
             .children(blocked_notice(app, uid, blocked, ignored, cx))
             .children(private_notice(&i, uid))
-            .children(provisional_notice(&i, uid));
+            .children(provisional_notice(app, &i, uid, cx));
         if let Some(b) = bio {
             let e2 = e.clone();
             body = body.child(
@@ -721,6 +806,14 @@ fn panel(app: &PhoenixApp, uid: Id, cx: &mut Context<PhoenixApp>) -> AnyElement 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn game_request_bolds_the_name_the_label_and_the_game() {
+        let (body, bold) = game_request_text("Wumpus", "Ferris Quest");
+        assert_eq!(body.as_ref(), "Wumpus sent you a Game Friend request from Ferris Quest.");
+        let parts: Vec<&str> = bold.iter().map(|r| &body[r.clone()]).collect();
+        assert_eq!(parts, ["Wumpus", "Game Friend", "Ferris Quest"]);
+    }
 
     fn act(kind: ActivityKind, name: &str, app: Option<&str>) -> Activity {
         Activity {

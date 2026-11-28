@@ -532,6 +532,10 @@ impl Backend for MockBackend {
         }));
         Some(p)
     }
+    fn games(&self, ids: Vec<u64>) -> BoxFuture<Vec<crate::ui::profile_games::Game>> {
+        let games = ids.into_iter().filter(|i| *i == 50).map(|id| crate::ui::profile_games::Game { id, name: "Ferris Quest".into(), cover: None, icon: None }).collect();
+        Box::pin(async move { Ok(games) })
+    }
     fn game_widgets(&self, _user: Id) -> BoxFuture<Vec<crate::ui::profile_games::GameWidget>> {
         use crate::ui::profile_games::{Game, GameWidget, Kind};
         let g = |id: u64, n: &str| Game { id, name: n.to_owned().into(), cover: None, icon: None };
@@ -687,6 +691,9 @@ impl Backend for MockBackend {
                     note: None,
                 })
                 .collect();
+            if matches!(peer.as_deref(), Some("game" | "provisional")) {
+                self.emit_later(Duration::from_millis(35), || AppEvent::Nav(crate::ui::home::data::NavEvent::GameRequests(vec![(Id(2), Id(50))])));
+            }
             self.emit_later(Duration::from_millis(30), move || {
                 AppEvent::Nav(crate::ui::home::data::NavEvent::Snapshot {
                     relationships: rels,

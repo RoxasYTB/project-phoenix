@@ -285,6 +285,14 @@ impl GuardedWrite {
         write(Method::POST, format!("/quests/{quest}/video-progress"), Some(json!({ "timestamp": timestamp })))
     }
 
+    pub fn accept_game_friend(user: u64, application: u64) -> Self {
+        write(Method::PUT, format!("/users/@me/game-relationships/{user}/{application}"), Some(json!({ "type": 1 })))
+    }
+
+    pub fn remove_game_relationship(user: u64, application: u64) -> Self {
+        write(Method::DELETE, format!("/users/@me/game-relationships/{user}/{application}"), None)
+    }
+
     pub fn ring_call(channel: u64) -> Self {
         write(Method::POST, format!("/channels/{channel}/call/ring"), Some(json!({ "recipients": null })))
     }
@@ -488,6 +496,10 @@ mod tests {
         );
         let ring = GuardedWrite::ring_call(9);
         assert_eq!((ring.method, ring.path.as_str(), ring.body), (Method::POST, "/channels/9/call/ring", Some(json!({ "recipients": null }))));
+        let game = GuardedWrite::accept_game_friend(3, 4);
+        assert_eq!((game.method, game.path.as_str(), game.body), (Method::PUT, "/users/@me/game-relationships/3/4", Some(json!({ "type": 1 }))));
+        let drop = GuardedWrite::remove_game_relationship(3, 4);
+        assert_eq!((drop.method, drop.path.as_str(), drop.body), (Method::DELETE, "/users/@me/game-relationships/3/4", None));
         assert_eq!(GuardedWrite::quest_dismiss(8, 11).path, "/quests/8/dismissible-content/11/dismiss");
         assert_eq!(GuardedWrite::quest_video_progress(8, 2.5).body, Some(json!({ "timestamp": 2.5 })));
         let buy = GuardedWrite::sku_purchase(7, false, 120, "discord_orb");
