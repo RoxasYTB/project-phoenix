@@ -1420,6 +1420,9 @@ impl Backend for DiscordBackend {
     fn quests(&self) -> BoxFuture<serde_json::Value> {
         self.with_session(move |_, s| async move { s.rest.request_json(reqwest::Method::GET, "/quests/@me", None).await.map_err(api_err) })
     }
+    fn quest_decision(&self) -> BoxFuture<serde_json::Value> {
+        self.with_session(move |_, s| async move { s.rest.request_json(reqwest::Method::GET, crate::ui::quest_bar::DECISION_PATH, None).await.map_err(api_err) })
+    }
     fn quest_home_hero(&self) -> BoxFuture<serde_json::Value> {
         let path = crate::ui::quests_page::home_hero_path();
         self.with_session(move |_, s| async move { s.rest.request_json(reqwest::Method::GET, &path, None).await.map_err(api_err) })

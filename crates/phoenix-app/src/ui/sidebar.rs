@@ -1664,6 +1664,7 @@ pub fn panels(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
                 .bg(crate::theme::client_theme::surface(crate::theme::client_theme::Level::AppFrame, Some(crate::theme::client_theme::Level::AppFrame), Palette::BG_SECONDARY)),
         )
         .child(panels_card(app, cx))
+        .children(crate::ui::quest_bar::overlay(app, 10. + 1. + m::USER_PANEL_H, 11., cx))
 }
 
 fn panels_card(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {

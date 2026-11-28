@@ -627,7 +627,7 @@ pub fn secondary_cta(q: &Quest) -> Option<(SharedString, Cta)> {
     Some((label, cta))
 }
 
-fn run(a: &mut PhoenixApp, cta: &Cta, cx: &mut Context<PhoenixApp>) {
+pub(crate) fn run(a: &mut PhoenixApp, cta: &Cta, cx: &mut Context<PhoenixApp>) {
     match cta {
         Cta::Enroll(id) => a.blocked_write(crate::actions::guard::GuardedWrite::quest_enroll(*id, QUEST_HOME_DESKTOP), cx),
         Cta::Open(url) => cx.open_url(url),

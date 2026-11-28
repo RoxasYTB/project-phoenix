@@ -588,6 +588,15 @@ impl Backend for MockBackend {
         });
         Box::pin(async move { Ok(v) })
     }
+    fn quest_decision(&self) -> BoxFuture<serde_json::Value> {
+        let v = (std::env::var("PHX_MOCK_QUEST").as_deref() == Ok("new")).then(|| {
+            serde_json::json!({"creative": {"creative_type": 1, "creative_content": {"id": "2", "expires_at": "2999-01-01T00:00:00+00:00",
+                "messages": {"quest_name": "Ferris Quest", "game_title": "Ferris Quest", "game_publisher": "Phoenix"},
+                "rewards_config": {"rewards": [{"type": 4, "orb_quantity": 700, "messages": {"name": "700 Orbs"}}]},
+                "task_config_v2": {"tasks": {"PLAY_ON_DESKTOP": {"target": 900}}}}}, "user_status": null})
+        });
+        Box::pin(async move { Ok(v.unwrap_or(serde_json::Value::Null)) })
+    }
     fn premium_tier2(&self) -> bool {
         std::env::var_os("PHX_NO_PREMIUM").is_none()
     }

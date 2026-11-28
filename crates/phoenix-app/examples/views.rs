@@ -48,6 +48,9 @@ fn main() -> anyhow::Result<()> {
         *v2.borrow_mut() = Some(v.clone());
         cx.new(|cx| Root::new(v, window, cx))
     })?;
+    if let Some(scale) = std::env::var("PHX_SCALE").ok().and_then(|v| v.parse::<f32>().ok()).filter(|s| *s > 0.) {
+        cx.update_window(win.into(), |_, window, _| window.set_scale_factor(scale))?;
+    }
     let pump = |cx: &mut HeadlessAppContext, n: usize| {
         for _ in 0..n {
             std::thread::sleep(Duration::from_millis(50));
@@ -96,6 +99,7 @@ fn main() -> anyhow::Result<()> {
                             "friends-add" => phoenix_app::ui::home::data::FriendsTab::AddFriend,
                             _ => phoenix_app::ui::home::data::FriendsTab::Pending,
                         };
+                        phoenix_app::ui::quest_bar::force_expanded(std::env::var_os("PHX_QUEST_EXPANDED").is_some());
                     }
                     "inbox" | "pins" | "threads" | "search" => {
                         let g = app.guilds.first().map(|g| g.id);
