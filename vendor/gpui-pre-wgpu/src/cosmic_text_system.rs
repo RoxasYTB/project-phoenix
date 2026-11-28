@@ -55,6 +55,7 @@ struct CosmicTextSystemState {
     loaded_fonts: Vec<LoadedFont>,
     loaded_font_ids_by_key: HashMap<LoadedFontKey, FontId>,
     synthetic_bold_twins: HashMap<FontId, FontId>,
+    fallback_family_faces: HashMap<SharedString, SmallVec<[(u16, Style); 4]>>,
     /// Caches the `FontId`s associated with a specific family to avoid iterating the font database
     /// for every font face in a family.
     font_ids_by_family_cache: HashMap<FontKey, SmallVec<[FontId; 4]>>,
@@ -141,6 +142,7 @@ impl CosmicTextSystem {
             loaded_fonts: Vec::new(),
             loaded_font_ids_by_key: HashMap::default(),
             synthetic_bold_twins: HashMap::default(),
+            fallback_family_faces: HashMap::default(),
             font_ids_by_family_cache: HashMap::default(),
             system_font_fallback: system_font_fallback.to_string(),
             missing_glyph_sink: None,
@@ -161,6 +163,7 @@ impl CosmicTextSystem {
             loaded_fonts: Vec::new(),
             loaded_font_ids_by_key: HashMap::default(),
             synthetic_bold_twins: HashMap::default(),
+            fallback_family_faces: HashMap::default(),
             font_ids_by_family_cache: HashMap::default(),
             system_font_fallback: system_font_fallback.to_string(),
             missing_glyph_sink: None,
@@ -322,8 +325,7 @@ impl CosmicTextSystemState {
                 properties.attributes(font_id, &properties.primary_family_name);
             self.font_system.get_font_matches(&primary_attributes);
 
-            for (fallback_id, fallback_name) in &*properties.fallback_chain {
-                let fallback_attributes = properties.attributes(*fallback_id, fallback_name);
+            for fallback_attributes in self.fallback_attributes(&properties) {
                 self.font_system.get_font_matches(&fallback_attributes);
             }
         }
@@ -379,7 +381,19 @@ impl CosmicTextSystemState {
                     if let Some(face) = self.font_system.db().face(db_id)
                         && let Some(family) = face.families.first()
                     {
-                        chain.push((fb_id, SharedString::from(family.0.clone())));
+                        let family = SharedString::from(family.0.clone());
+                        let faces = fb_ids
+                            .iter()
+                            .filter_map(|id| {
+                                let face = self
+                                    .font_system
+                                    .db()
+                                    .face(self.loaded_fonts[id.0].font.id())?;
+                                Some((face.weight.0, face.style))
+                            })
+                            .collect();
+                        self.fallback_family_faces.insert(family.clone(), faces);
+                        chain.push((fb_id, family));
                     }
                 }
                 Arc::from(chain)
@@ -610,6 +624,32 @@ impl CosmicTextSystemState {
             .map_or(400, |face| face.weight.0)
     }
 
+    // PHOENIX PATCH (fallback weight): cosmic-text only takes a default family face whose weight
+    // equals the requested one, so a 600 run skipped every regular-only fallback family (DejaVu
+    // Sans) for a script fallback in bold (Noto Sans Arabic Bold). Ask each fallback family for
+    // the face CSS font matching picks among its own faces; synthetic bold covers the rest.
+    fn fallback_attributes<'a>(
+        &self,
+        properties: &'a FontMatchProperties,
+    ) -> SmallVec<[Attrs<'a>; 4]> {
+        properties
+            .fallback_chain
+            .iter()
+            .map(|(font_id, family_name)| {
+                let attrs = properties.attributes(*font_id, family_name);
+                match self
+                    .fallback_family_faces
+                    .get(family_name)
+                    .and_then(|faces| {
+                        css_matched_weight(faces, properties.style, properties.weight.0)
+                    }) {
+                    Some(weight) => attrs.weight(Weight(weight)),
+                    None => attrs,
+                }
+            })
+            .collect()
+    }
+
     fn synthetic_bold_twin(&mut self, font_id: FontId) -> FontId {
         if let Some(&twin) = self.synthetic_bold_twins.get(&font_id) {
             return twin;
@@ -743,11 +783,7 @@ impl CosmicTextSystemState {
             run_weights.push((run_end, properties.weight.0));
 
             let primary_attrs = properties.attributes(run.font_id, &properties.primary_family_name);
-            let fallback_attrs: SmallVec<[Attrs<'_>; 4]> = properties
-                .fallback_chain
-                .iter()
-                .map(|(font_id, family_name)| properties.attributes(*font_id, family_name))
-                .collect();
+            let fallback_attrs = self.fallback_attributes(&properties);
 
             let spans = if properties.fallback_chain.is_empty() {
                 let mut spans = SmallVec::<[RunSpan; 4]>::new();
@@ -1399,6 +1435,36 @@ fn face_info_into_properties(
     }
 }
 
+fn css_matched_weight(faces: &[(u16, Style)], style: Style, wanted: u16) -> Option<u16> {
+    let same_style: SmallVec<[u16; 4]> =
+        faces.iter().filter(|f| f.1 == style).map(|f| f.0).collect();
+    let weights: SmallVec<[u16; 4]> = if same_style.is_empty() {
+        faces.iter().map(|f| f.0).collect()
+    } else {
+        same_style
+    };
+    let at_or_above = |from: u16| weights.iter().copied().filter(|&w| w >= from).min();
+    let below = |to: u16| weights.iter().copied().filter(|&w| w < to).max();
+    if (400..=500).contains(&wanted) {
+        weights
+            .iter()
+            .copied()
+            .filter(|w| (wanted..=500).contains(w))
+            .min()
+            .or_else(|| below(wanted))
+            .or_else(|| at_or_above(501))
+    } else if wanted < 400 {
+        weights
+            .iter()
+            .copied()
+            .filter(|&w| w <= wanted)
+            .max()
+            .or_else(|| at_or_above(wanted))
+    } else {
+        at_or_above(wanted).or_else(|| below(wanted))
+    }
+}
+
 // PHOENIX PATCH (synthetic bold, docs/gpui-patches.md): Chromium on Linux draws a
 // fallback face lighter than 600 with FreeType's FT_Outline_Embolden when the text asks
 // for 600 or more (DejaVu Sans Book under gg sans 600). The outline grows by ppem / 24
@@ -1499,6 +1565,38 @@ mod tests {
         assert!(!needs_synthetic_bold(700, 700, false));
         assert!(!needs_synthetic_bold(700, 400, true));
         assert_eq!(synthetic_bold_strength(24.), 0.5);
+    }
+
+    #[test]
+    fn fallback_weight_follows_css_font_matching() {
+        let n = |w: &[u16]| w.iter().map(|&w| (w, Style::Normal)).collect::<Vec<_>>();
+        assert_eq!(
+            css_matched_weight(&n(&[400]), Style::Normal, 600),
+            Some(400)
+        );
+        assert_eq!(
+            css_matched_weight(&n(&[400, 700]), Style::Normal, 600),
+            Some(700)
+        );
+        assert_eq!(
+            css_matched_weight(&n(&[400, 700]), Style::Normal, 500),
+            Some(400)
+        );
+        assert_eq!(
+            css_matched_weight(&n(&[300, 600]), Style::Normal, 450),
+            Some(300)
+        );
+        assert_eq!(
+            css_matched_weight(&n(&[500, 700]), Style::Normal, 300),
+            Some(500)
+        );
+        assert_eq!(
+            css_matched_weight(&n(&[400, 500, 600, 700]), Style::Normal, 600),
+            Some(600)
+        );
+        let mixed = [(400, Style::Normal), (700, Style::Italic)];
+        assert_eq!(css_matched_weight(&mixed, Style::Normal, 700), Some(400));
+        assert_eq!(css_matched_weight(&[], Style::Normal, 400), None);
     }
 
     fn chain(ids: &[usize]) -> SmallVec<[(FontId, SharedString); 4]> {
