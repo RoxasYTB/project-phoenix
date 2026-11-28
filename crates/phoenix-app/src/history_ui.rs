@@ -546,7 +546,7 @@ mod preload_tests {
                 thread.name = "fil-de-test".into();
                 thread.parent = Some(text[0]);
                 let mut msg = app.messages.values().flat_map(|e| e.msgs.iter()).next().cloned().unwrap_or_default();
-                msg.content = format!("voir <#{}>", thread.id.0);
+                msg.content = format!("voir <#{}>", thread.id.0).into();
                 assert_eq!(super::unknown_channel_mentions(app, std::slice::from_ref(&msg)), vec![thread.id.0]);
                 app.nav.threads.entry(text[0]).or_default().push(thread.clone());
                 assert!(super::unknown_channel_mentions(app, std::slice::from_ref(&msg)).is_empty());
