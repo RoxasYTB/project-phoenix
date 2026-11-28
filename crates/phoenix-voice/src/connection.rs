@@ -198,6 +198,8 @@ struct VideoTx {
 }
 
 pub const RTX_HISTORY: usize = 1024;
+pub const PACING_BURST: usize = 8;
+pub const PACING_GAP: Duration = Duration::from_millis(1);
 
 #[derive(Default)]
 pub struct RtxHistory {
@@ -1008,7 +1010,10 @@ async fn run(
                             for (i, p) in payloads.iter().enumerate() {
                                 vt.history.record(first_seq.wrapping_add(i as u16), ts, i + 1 == count, p);
                             }
-                            for p in vt.sender.wrap(payloads, ts) {
+                            for (i, p) in vt.sender.wrap(payloads, ts).into_iter().enumerate() {
+                                if i > 0 && i.is_multiple_of(PACING_BURST) {
+                                    tokio::time::sleep(PACING_GAP).await;
+                                }
                                 match m.socket.send_rtp(&p).await {
                                     Ok(()) => stats.video_packets_sent += 1,
                                     Err(e) => tracing::debug!(error = %e, "voice: video send failed"),
