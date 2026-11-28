@@ -402,3 +402,12 @@ Source: `web.b63d846b329d6470.js` module 457864 (`Draggable` class `E`, `Picture
 | reduced motion | the `animated` spring is used directly, no reduced-motion check in this path | same, no check | ✅ |
 | while dragging | card `pointer-events: none`, `cursor: grabbing`; the layer gets `.dragging` (full size, `cursor: grabbing`) | drag layer + card `cursor_grabbing` | ✅ |
 | click (no drag) | goes through to the PiP video's own click handler (return to the call) | `jump_to_call` | ✅ |
+## Animated avatar while speaking (28/11)
+
+| item | client source | Phoenix | status |
+|---|---|---|---|
+| call tile avatar / decoration | module 83982 (chunk `d6caa202792cce11.js`): `et = speaking && (callPopoutFocused \|\| mainWindowFocused)`, then hook 854627 `{avatarSrc, avatarDecorationSrc} = A({userId, guildId, size, animateOnHover: !et})`: animated while speaking in a focused window, otherwise animated only on hover (static first frame) | `voice_panel::speaking_avatar` / `speaking_deco_avatar` with `speaking_plays(speaking)` (focus + reduced motion through `avatar_deco::may_animate`) in call tiles, DM call avatars, sidebar voice rows, `voice_row` members, PiP and call popout | ✅ user rule applied: animated ONLY while the speaking ring is shown; silent = first frame (`media::static_variant`, LRU cached and kept painted under the animated layer, so no reload or blink when switching) |
+| hover exception | client: hovering a silent tile animates it (`animateOnHover`) | not applied: silent avatars stay on the first frame even on hover (user decision 28/11) | ➖ deliberate difference |
+| speaking hysteresis | the tile reads `participant.speaking` directly (SpeakingStore, no extra delay in the component); any hang time comes from the voice engine | `app.voice.is_speaking` directly, no extra delay; choppy speech restarts the animation like in the client | ✅ |
+| reduced motion | hook 854627 follows the shared animation gate (module 338932) | `may_animate(focused, reduced, None, false)`: nothing animates with reduced motion | ✅ |
+| demo | `call_view` example `PHX_SPEAK_SEQ=1110001` (`PHX_SPEAK_USER`, default 3) toggles a participant and writes one frame per step (`-sNNN.png`, 100 ms apart) | | |

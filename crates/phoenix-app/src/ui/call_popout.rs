@@ -144,7 +144,7 @@ fn render_popout_tile(app: &PhoenixApp, user_id: Id, stream: bool, w: f32, h: f3
         .map(|d| match video {
             Some(img) => d.child(gpui::img(img).absolute().inset_0().size_full().object_fit(gpui::ObjectFit::Contain)),
             None if stream => d.child(svg().path("icons/voice/screen.svg").size(z(40.)).text_color(white)),
-            None => d.child(crate::ui::avatar(u, 72. * zoom())),
+            None => d.child(crate::ui::voice_panel::speaking_avatar(u, 72. * zoom(), None, crate::ui::voice_panel::speaking_plays(speaking))),
         })
         .when(stream, |d| {
             d.child(

@@ -391,7 +391,7 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
         .map(|d| match video {
             Some(img) => d.child(gpui::img(img).absolute().inset_0().size_full().object_fit(gpui::ObjectFit::Contain)),
             None if is_stream => d.child(gpui::svg().path("icons/voice/screen.svg").size(z(36.)).text_color(white)),
-            None => d.child(crate::ui::avatar(user, 64. * k)),
+            None => d.child(crate::ui::voice_panel::speaking_avatar(user, 64. * k, None, crate::ui::voice_panel::speaking_plays(speaking))),
         })
         .when(is_stream, |d| {
             d.child(

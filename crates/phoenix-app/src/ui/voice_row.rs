@@ -70,7 +70,7 @@ pub fn collapsed_list(app: &crate::app::PhoenixApp, users: &[Id]) -> AnyElement 
                 .ml(z(8.))
                 .flex()
                 .items_center()
-                .child(crate::ui::voice_panel::speaking_ring(crate::ui::avatar(app.users.get(u), 24.), 24., speaking))
+                .child(crate::ui::voice_panel::speaking_ring(crate::ui::voice_panel::speaking_avatar(app.users.get(u), 24., None, crate::ui::voice_panel::speaking_plays(speaking)), 24., speaking))
         }))
         .into_any_element()
 }

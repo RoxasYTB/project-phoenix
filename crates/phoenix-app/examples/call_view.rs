@@ -221,6 +221,24 @@ fn main() -> anyhow::Result<()> {
             snap(&mut cx, &format!("{}-leave.png", out.trim_end_matches(".png")))?;
         }
     }
+    if let Ok(seq) = std::env::var("PHX_SPEAK_SEQ") {
+        let who = phoenix_app::model::Id(std::env::var("PHX_SPEAK_USER").ok().and_then(|v| v.parse().ok()).unwrap_or(3));
+        let v = view.borrow().clone().expect("view");
+        for (i, on) in seq.chars().filter(|c| *c == '0' || *c == '1').enumerate() {
+            cx.update_window(win.into(), |_, _, cx| {
+                v.update(cx, |app, cx| {
+                    if on == '1' {
+                        app.voice.speaking.insert(who);
+                    } else {
+                        app.voice.speaking.remove(&who);
+                    }
+                    cx.notify();
+                });
+            })?;
+            std::thread::sleep(Duration::from_millis(100));
+            snap(&mut cx, &format!("{}-s{i:03}.png", out.trim_end_matches(".png")))?;
+        }
+    }
     phoenix_app::ui::call_view::touch();
     cx.update_window(win.into(), |_, window, _| window.refresh())?;
     pump(&mut cx, 2);

@@ -326,7 +326,7 @@ fn lobby_tile(app: &PhoenixApp, user: Id, zoom: f32, cx: &mut Context<PhoenixApp
         .flex()
         .items_center()
         .justify_center()
-        .child(deco_avatar(app.users.get(&user), 48. * zoom))
+        .child(crate::ui::voice_panel::speaking_deco_avatar(app.users.get(&user), 48. * zoom, false))
         .into_any_element()
 }
 
@@ -836,7 +836,7 @@ fn voice_avatar(app: &PhoenixApp, user: Id, size: f32) -> AnyElement {
         .size(z(size))
         .flex_none()
         .rounded_full()
-        .child(avatar(app.users.get(&user), size * crate::theme::zoom()))
+        .child(crate::ui::voice_panel::speaking_avatar(app.users.get(&user), size * crate::theme::zoom(), None, crate::ui::voice_panel::speaking_plays(active)))
         .when(ring_alpha > 0.001, |d| {
             d.child(
                 div()
@@ -2101,7 +2101,7 @@ fn render_tile(app: &PhoenixApp, tile: &Tile, w: f32, h: f32, rule_w: f32, fade:
                     d.bg(t(idx::BACKGROUND_BASE_LOWER)).child(gpui::img(img).absolute().inset_0().size_full().object_fit(video_fit(in_strip, aspect)))
                 }
                 None if show_video && !me && crate::voice::call::in_call() => d.bg(t(idx::BLACK)).child(video_loading()),
-                None => d.child(deco_avatar(u, look.avatar * crate::theme::zoom())),
+                None => d.child(crate::ui::voice_panel::speaking_deco_avatar(u, look.avatar * crate::theme::zoom(), crate::ui::voice_panel::speaking_plays(speaking))),
             })
             .children(crate::ui::voice_effects::overlay(tile.user, w, h))
             .when(look.show_name, |d| {
@@ -2167,14 +2167,6 @@ fn render_tile(app: &PhoenixApp, tile: &Tile, w: f32, h: f32, rule_w: f32, fade:
             })
     };
     inner.into_any_element()
-}
-
-fn deco_avatar(user: Option<&crate::model::User>, size: f32) -> AnyElement {
-    let face = avatar(user, size);
-    match crate::ui::avatar_deco::source(user, None) {
-        Some(src) => div().relative().flex_none().size(gpui::px(size)).child(face).child(crate::ui::avatar_deco::layer(src, size)).into_any_element(),
-        None => face,
-    }
 }
 
 pub fn stream_mute_shown(own: bool, has_video: bool, width: f32, muted: bool) -> bool {

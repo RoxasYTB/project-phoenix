@@ -1051,7 +1051,7 @@ pub fn voice_user_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, user: Id) -
         })
         .children(crate::ui::voice_row::stream_preview(app, user, entity.clone()))
         .child(speaking_ring_alpha(
-            crate::ui::avatar_cdn(u, 24., 32),
+            speaking_avatar(u, 24., Some(32), speaking_plays(speaking)),
             24.,
             speaking_fade(user, speaking || crate::voice::soundboard::is_user_playing(user)).0,
             crate::voice::soundboard::is_user_playing(user),
@@ -1732,5 +1732,72 @@ mod tests {
             assert_eq!(NoiseMode::effective(&p), expected);
             assert!(p == before);
         }
+    }
+}
+
+pub fn speaking_animates(speaking: bool, focused: bool, reduced: bool) -> bool {
+    speaking && crate::ui::avatar_deco::may_animate(focused, reduced, None, false)
+}
+
+pub fn speaking_plays(speaking: bool) -> bool {
+    speaking && crate::ui::avatar_deco::ambient()
+}
+
+pub fn speaking_avatar_src(url: &str, play: bool) -> SharedString {
+    if play { url.to_owned().into() } else { crate::media::static_variant(url) }
+}
+
+pub fn speaking_avatar(user: Option<&crate::model::User>, size: f32, cdn: Option<u32>, play: bool) -> AnyElement {
+    match user.map(|u| &u.avatar) {
+        Some(crate::model::ImageRef::Url(url)) if crate::media::is_animated(url) => {
+            let url = cdn.map_or_else(|| url.clone(), |s| crate::media::with_cdn_size(url, s));
+            let first = crate::media::lru::cached(gpui::img(speaking_avatar_src(&url, false))).size(px(size));
+            let moving = play.then(|| {
+                let mut im = gpui::img(url.clone());
+                if let Some(cache) = crate::media::lru::chat() {
+                    im = im.image_cache(&cache);
+                }
+                im.id(crate::media::anim_id(&url)).absolute().inset_0().size(px(size))
+            });
+            div().relative().size(px(size)).flex_none().rounded_full().overflow_hidden().child(first).children(moving).into_any_element()
+        }
+        _ => match cdn {
+            Some(s) => crate::ui::avatar_cdn(user, size, s),
+            None => crate::ui::avatar(user, size),
+        },
+    }
+}
+
+pub fn speaking_deco_avatar(user: Option<&crate::model::User>, size: f32, play: bool) -> AnyElement {
+    let face = speaking_avatar(user, size, None, play);
+    match user.and_then(|u| u.decoration.clone()) {
+        Some(deco) => div()
+            .relative()
+            .flex_none()
+            .size(px(size))
+            .child(face)
+            .child(crate::ui::avatar_deco::layer(crate::ui::avatar_deco::src(&deco, play), size))
+            .into_any_element(),
+        None => face,
+    }
+}
+
+#[cfg(test)]
+mod speaking_avatar_tests {
+    use super::{speaking_animates, speaking_avatar_src};
+
+    #[test]
+    fn animates_only_while_speaking_in_a_focused_window() {
+        assert!(speaking_animates(true, true, false));
+        assert!(!speaking_animates(false, true, false));
+        assert!(!speaking_animates(true, false, false));
+        assert!(!speaking_animates(true, true, true));
+    }
+
+    #[test]
+    fn silent_avatar_uses_the_first_frame() {
+        let gif = "https://cdn.discordapp.com/avatars/1/a_ab.gif?size=80";
+        assert_eq!(speaking_avatar_src(gif, true).as_ref(), gif);
+        assert_eq!(speaking_avatar_src(gif, false).as_ref(), "https://cdn.discordapp.com/avatars/1/a_ab.png?size=80");
     }
 }
