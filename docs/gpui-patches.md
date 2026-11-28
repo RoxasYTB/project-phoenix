@@ -794,6 +794,29 @@ decoration seen in a profile popout stayed decoded in memory for the rest of the
 and the deferred prepaint and paint restore it, then clear it. Rev: `617acfac` on
 `gpui-deferred-cache` (parent `29af93c0`, so nothing else moves).
 
+## 25. Fallback faces picked by CSS weight matching (`vendor/gpui-pre-wgpu/src/cosmic_text_system.rs`, `fallback_attributes`, `css_matched_weight`)
+
+**Problem.** In a gg sans 600 friend row, « مادارا » was drawn in Noto Sans Arabic Bold: heavier and
+wider than the client, so the name ellipsized one Hangul syllable earlier (« 마… » instead of « 마다… »)
+and left ~16 CSS px before the server tag.
+
+**Reference.** Live client 2026-11-28, `CSS.getPlatformFontsForNode` on a hidden `var(--font-primary)`
+16px span: DejaVuSans (Arabic) and NotoSansCJKjp-Regular (Hangul) at 400, 500, 600 and 700, widths
+unchanged (« مادارا » 37.19 px = HarfBuzz DejaVu Sans Book 37.188; DejaVu Bold would be 44.31,
+Noto Sans Arabic Bold 37.55). Ink grows from 600 (synthetic bold, patch 11).
+
+**Cause.** cosmic-text `FontFallbackIter::default_font_match_key` keeps a family face only when
+`font_weight_diff == 0`. The fallback `Attrs` carried the primary weight (600), so every family without a
+600 face (`Phx DejaVu Sans`, `Phx Noto Sans` 400/700, the CJK families) was skipped and cosmic-text went on
+to its own script fallback (Noto Sans Arabic, which has a Bold).
+
+**Patch.** `load_family` records the weights and styles of each fallback family's faces;
+`fallback_attributes` asks each family for the weight CSS font matching picks among them
+(`css_matched_weight`: 400–500 look up to 500 then down, below 400 down then up, above 500 up then down,
+same style first). Synthetic bold still applies when the run asks for 600+ and the face is lighter. Rev
+`112acf8d` (branch `gpui-fallback-weight`, on top of `869f38c1`). Test
+`fallback_weight_follows_css_font_matching`.
+
 ## Running the vendored tests
 
 The lib tests of both crates run from a small test-only workspace, `vendor/Cargo.toml`
