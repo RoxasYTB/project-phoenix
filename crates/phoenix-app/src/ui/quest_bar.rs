@@ -373,10 +373,7 @@ pub fn overlay(app: &PhoenixApp, bottom: f32, inset: f32, cx: &mut Context<Phoen
     if !expanded() {
         return None;
     }
-    let Some(q) = current(app, cx) else {
-        EXPANDED.with(|e| e.set(false));
-        return None;
-    };
+    let q = current(app, cx)?;
     let content = if q.enrolled { accepted_content(&q) } else { promo_content(&q, cx) };
     Some(
         div()

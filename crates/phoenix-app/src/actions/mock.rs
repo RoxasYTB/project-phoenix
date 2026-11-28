@@ -4,6 +4,12 @@ use super::{ActionReply, ActionRequest};
 use crate::{backend::BackendError, model::User};
 
 pub fn report_menu(name: &str) -> ReportMenu {
+    if let Some(raw) = std::env::var_os("PHX_MOCK_REPORT_DIR").and_then(|d| std::fs::read_to_string(std::path::Path::new(&d).join(format!("{name}.txt"))).ok()) {
+        let body = raw.find('{').map_or("", |i| &raw[i..]);
+        if let Ok(m) = serde_json::from_str(body) {
+            return m;
+        }
+    }
     let json = format!(
         r#"{{"name":"{name}","variant":"mock","version":"1","language":"en","root_node_id":1,"success_node_id":9,"fail_node_id":10,
         "nodes":{{"1":{{"id":1,"key":"start","header":"What's going on?","subheader":"Pick the option that fits best.","children":[["Spam",2],["Abuse or harassment",3],["Something else",3]]}},
