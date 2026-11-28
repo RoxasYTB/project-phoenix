@@ -893,7 +893,7 @@ fn add_friend(app: &PhoenixApp, window: &Window, cx: &mut Context<PhoenixApp>) -
                         .line_height(z(20.))
                         .font_weight(FontWeight::MEDIUM)
                         .text_color(c(tok(idx::TEXT_DEFAULT)))
-                        .when_some(input, |d, i| d.child(Input::new(&i).appearance(false).bordered(false).pl(z(0.)))),
+                        .when_some(input, |d, i| d.child(Input::new(&i).appearance(false).bordered(false).pl(z(0.)).text_size(z(16.)).line_height(z(20.)))),
                 )
                 .child(send),
         )
@@ -911,7 +911,9 @@ fn add_friend(app: &PhoenixApp, window: &Window, cx: &mut Context<PhoenixApp>) -
                         .line_height(z(20.))
                         .font_weight(FontWeight::MEDIUM)
                         .text_color(c(tok(idx::TEXT_SUBTLE)))
-                        .when_some(note, |d, n| d.child(gpui_component::input::Textarea::new(&n).appearance(false).bordered(false))),
+                        .when_some(note, |d, n| {
+                            d.child(gpui_component::input::Textarea::new(&n).appearance(false).bordered(false).p(z(0.)).text_size(z(16.)).line_height(z(20.)))
+                        }),
                 )
                 .child(
                     div().pt(z(4.)).flex().justify_end().child(
@@ -1023,7 +1025,7 @@ fn add_friend(app: &PhoenixApp, window: &Window, cx: &mut Context<PhoenixApp>) -
                         .pr(z(128.))
                         .flex()
                         .items_start()
-                        .child(lead(crate::t!("friends.add_hint")))
+                        .child(lead(crate::t!("friends.add_hint")).flex_1().min_w_0())
                         .child(div().absolute().right(z(16.)).bottom(z(-16.)).w(z(84.)).h(z(72.)).child(gpui::img(WUMPUS_WAVING).size_full())),
                 )
                 .child(form_box)
