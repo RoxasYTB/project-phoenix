@@ -285,6 +285,7 @@ fn svg_for(path: &str) -> Option<&'static str> {
         "icons/nitro.svg" => f!(r#"<path d="M3 9h5v2H3zm1 4h4v2H4zM14 4a8 8 0 1 1 0 16 8 8 0 0 1-6.9-4h2.5A6 6 0 1 0 9.6 8H7.1A8 8 0 0 1 14 4zm0 4a4 4 0 1 1 0 8 4 4 0 0 1 0-8z"/>"#),
         "icons/camera.svg" => s!(r#"<rect x="2" y="6" width="14" height="12" rx="2"/><path d="m16 10 6-3v10l-6-3"/>"#),
         "icons/deny.svg" => s!(r#"<circle cx="12" cy="12" r="10"/><path d="m5 5 14 14"/>"#),
+        "icons/eye.svg" => s!(r#"<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>"#),
         "icons/eye-slash.svg" => s!(r#"<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/><path d="M3 3l18 18"/>"#),
         "icons/blur.svg" => s!(r#"<circle cx="12" cy="12" r="9" stroke-dasharray="2 3"/><circle cx="12" cy="12" r="4"/>"#),
         "icons/play.svg" => f!(r#"<path d="M7 4.5v15a1 1 0 0 0 1.5.9l12-7.5a1 1 0 0 0 0-1.8l-12-7.5A1 1 0 0 0 7 4.5z"/>"#),

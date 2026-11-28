@@ -218,7 +218,12 @@ pub fn scanned_avatar(user_id: &str, avatar: Option<&str>) -> String {
 }
 
 pub fn qr_matrix(url: &str) -> Option<(Vec<bool>, usize)> {
-    let code = qrcode::QrCode::with_error_correction_level(url, qrcode::EcLevel::M).ok()?;
+    let code = (1..=40).find_map(|v| {
+        let mut bits = qrcode::bits::Bits::new(qrcode::Version::Normal(v));
+        bits.push_byte_data(url.as_bytes()).ok()?;
+        bits.push_terminator(qrcode::EcLevel::M).ok()?;
+        qrcode::QrCode::with_bits(bits, qrcode::EcLevel::M).ok()
+    })?;
     let size = code.width();
     let modules = code.to_colors().into_iter().map(|c| c == qrcode::Color::Dark).collect();
     Some((modules, size))
