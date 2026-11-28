@@ -76,6 +76,8 @@ fn main() -> anyhow::Result<()> {
             v.update(cx, |app, cx| {
                 use phoenix_app::ui::{pickers, settings};
                 app.prefs.synced.theme = theme;
+                app.prefs.local.zoom = std::env::var("PHX_ZOOM").ok().and_then(|v| v.parse().ok()).unwrap_or(100);
+                app.prefs.local.font_size = 16.;
                 let page = |app: &mut PhoenixApp, p, cx: &mut gpui::Context<PhoenixApp>| {
                     settings::open(app, cx);
                     if let Some(s) = app.settings.as_mut() {
