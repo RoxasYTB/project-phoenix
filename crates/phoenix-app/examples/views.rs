@@ -82,6 +82,9 @@ fn main() -> anyhow::Result<()> {
                         s.page = p;
                     }
                 };
+                if let Ok(code) = std::env::var("PHX_LOCALE") {
+                    phoenix_app::i18n::set_locale(&code);
+                }
                 match scene.as_str() {
                     "account" => page(app, settings::Page::MyAccount, cx),
                     "status" => app.toggle_status_picker(window, cx),
@@ -97,6 +100,9 @@ fn main() -> anyhow::Result<()> {
                         use phoenix_app::model::{Id, Reaction};
                         let g = app.guilds.first().map(|g| g.id);
                         app.select_guild(g, cx);
+                        if let Some(general) = app.channels.values().find(|c| c.guild == g && c.name.as_ref() == "general").map(|c| c.id) {
+                            app.select_channel(general, cx);
+                        }
                         let ch = app.selected_channel.unwrap_or_default();
                         let variant = m["rtip-".len()..].to_string();
                         let custom = variant.starts_with("custom");
