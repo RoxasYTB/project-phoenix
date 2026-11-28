@@ -61,6 +61,16 @@ fn main() -> anyhow::Result<()> {
             cx.run_until_parked();
         }
     };
+    if login_only {
+        let v = view.borrow().clone().expect("view");
+        cx.update_window(win.into(), |_, _, cx| {
+            v.update(cx, |app, cx| {
+                app.prefs.local.zoom = std::env::var("PHX_ZOOM").ok().and_then(|v| v.parse().ok()).unwrap_or(100);
+                app.prefs.local.font_size = 16.;
+                cx.notify();
+            });
+        })?;
+    }
     pump(&mut cx, 2);
     if !login_only {
         let v = view.borrow().clone().expect("view");
