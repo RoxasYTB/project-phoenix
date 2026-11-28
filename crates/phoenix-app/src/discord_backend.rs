@@ -291,9 +291,24 @@ async fn connect(inner: Arc<Inner>, token: Secret, remember: bool) -> Result<Rea
         }
     };
 
-    if remember && let Err(e) = store_op(&inner.store, move |s| s.save(&token)).await {
+    let uid = ready.user.id.0;
+    let acct = crate::saved_accounts::SavedAccount {
+        id: uid,
+        username: ready.user.username.clone(),
+        global_name: ready.user.global_name.clone(),
+        avatar: ready.user.avatar.clone(),
+    };
+    if let Err(e) = store_op(&inner.store, move |s| {
+        if remember {
+            s.save(&token)?;
+        }
+        s.save_account(uid, &token)
+    })
+    .await
+    {
         tracing_warn(&format!("could not save token to the keyring: {e}"));
     }
+    let _ = tokio::task::spawn_blocking(move || crate::saved_accounts::remember(acct)).await;
 
     qos_store::save(ready.user.id.0, ready.qos_token.as_deref());
     let prefs = Prefs::from_ready(&ready);
@@ -912,6 +927,39 @@ impl Backend for DiscordBackend {
             })
             .await;
             store_op(&inner.store, |s| s.clear()).await.map_err(err)
+        })
+    }
+
+    fn switch_account(&self, id: u64) -> BoxFuture<ReadyData> {
+        self.spawn(move |inner| async move {
+            let tok = store_op(&inner.store, move |s| s.load_account(id)).await.map_err(err)?;
+            let Some(tok) = tok else {
+                let _ = tokio::task::spawn_blocking(move || crate::saved_accounts::forget(id)).await;
+                return Err(err(crate::t!("accounts.switch_failed").to_string()));
+            };
+            if let Some(s) = inner.session.lock().take() {
+                s.gateway.shutdown();
+            }
+            let _ = tokio::task::spawn_blocking(|| {
+                snapshot::clear();
+                msg_cache::clear();
+            })
+            .await;
+            let res = connect(inner.clone(), tok, true).await;
+            if let Err(e) = &res
+                && e.0 == "Invalid token."
+            {
+                let _ = store_op(&inner.store, move |s| s.clear_account(id)).await;
+                let _ = tokio::task::spawn_blocking(move || crate::saved_accounts::forget(id)).await;
+            }
+            res
+        })
+    }
+
+    fn forget_account(&self, id: u64) -> BoxFuture<()> {
+        self.spawn(move |inner| async move {
+            let _ = tokio::task::spawn_blocking(move || crate::saved_accounts::forget(id)).await;
+            store_op(&inner.store, move |s| s.clear_account(id)).await.map_err(err)
         })
     }
 

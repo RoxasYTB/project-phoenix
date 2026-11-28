@@ -22,6 +22,19 @@ pub trait TokenStore: Send + Sync + 'static {
     fn load(&self) -> Result<Option<Secret>, String>;
     fn save(&self, token: &Secret) -> Result<(), String>;
     fn clear(&self) -> Result<(), String>;
+    fn load_account(&self, _id: u64) -> Result<Option<Secret>, String> {
+        Ok(None)
+    }
+    fn save_account(&self, _id: u64, _token: &Secret) -> Result<(), String> {
+        Ok(())
+    }
+    fn clear_account(&self, _id: u64) -> Result<(), String> {
+        Ok(())
+    }
+}
+
+pub fn account_key(id: u64) -> String {
+    format!("account:{id}")
 }
 
 pub const SERVICE: &str = "discord-phoenix";
@@ -33,6 +46,9 @@ pub struct KeyringStore;
 impl KeyringStore {
     fn entry() -> Result<keyring::Entry, String> {
         keyring::Entry::new(SERVICE, ACCOUNT).map_err(|e| e.to_string())
+    }
+    fn account_entry(id: u64) -> Result<keyring::Entry, String> {
+        keyring::Entry::new(SERVICE, &account_key(id)).map_err(|e| e.to_string())
     }
 }
 
@@ -58,6 +74,35 @@ impl TokenStore for KeyringStore {
             return Ok(());
         }
         match Self::entry()?.delete_credential() {
+            Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+            Err(e) => Err(e.to_string()),
+        }
+    }
+    fn load_account(&self, id: u64) -> Result<Option<Secret>, String> {
+        if crate::paths::is_sandboxed() {
+            return Ok(None);
+        }
+        match Self::account_entry(id)?.get_password() {
+            Ok(t) if !t.is_empty() => Ok(Some(Secret(t))),
+            Ok(_) | Err(keyring::Error::NoEntry) => Ok(None),
+            Err(e) => Err(e.to_string()),
+        }
+    }
+    fn save_account(&self, id: u64, token: &Secret) -> Result<(), String> {
+        if crate::paths::is_sandboxed() {
+            return Err("keyring disabled in sandbox".into());
+        }
+        let e = Self::account_entry(id)?;
+        if matches!(e.get_password(), Ok(t) if t == token.expose()) {
+            return Ok(());
+        }
+        e.set_password(token.expose()).map_err(|e| e.to_string())
+    }
+    fn clear_account(&self, id: u64) -> Result<(), String> {
+        if crate::paths::is_sandboxed() {
+            return Ok(());
+        }
+        match Self::account_entry(id)?.delete_credential() {
             Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
             Err(e) => Err(e.to_string()),
         }

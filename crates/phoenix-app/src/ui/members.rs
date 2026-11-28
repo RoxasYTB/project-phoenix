@@ -659,6 +659,7 @@ pub fn member_row_in(
             let activity = sub.as_ref().and_then(|s| s.main.as_ref().map(|m| m.0.clone()).or_else(|| s.custom.as_ref().and_then(|c| c.1.clone())));
             d.role(gpui::Role::ListItem).aria_label(crate::ui::a11y::member(&name, &status, activity.as_deref()))
         })
+        .child(crate::ui::avatar_deco::guard(crate::ui::avatar_deco::hover_key(1, uid.0)))
         .on_hover({
             let e = e.clone();
             move |h, _, cx| {

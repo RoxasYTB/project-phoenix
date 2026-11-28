@@ -851,12 +851,7 @@ fn dm_top(entity: &Entity<PhoenixApp>, cx: &App) -> impl IntoElement {
                 .id(id)
                 .when(id == "quests", |d| d.group("quests-row"))
                 .when(id == "quests" && hero.is_some(), |d| {
-                    let k = crate::ui::states::key("quests-hero-hover");
-                    d.on_hover(move |over, w, _| {
-                        if crate::ui::states::set_hover(k, *over) {
-                            w.refresh();
-                        }
-                    })
+                    crate::ui::states::track(d, crate::ui::states::key("quests-hero-hover"))
                 })
                 .relative()
                 .when(strong || hero.is_some(), |d| d.overflow_hidden())
@@ -1403,6 +1398,7 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
                     d.hover(|s| s.bg(t(idx::INTERACTIVE_BACKGROUND_HOVER)).text_color(t(idx::INTERACTIVE_TEXT_HOVER)))
                     .active(|s| s.bg(t(idx::INTERACTIVE_BACKGROUND_ACTIVE)))
                 })
+                .when(is_dm, |d| d.child(crate::ui::avatar_deco::guard(crate::ui::avatar_deco::hover_key(4, id.0))))
                 .on_hover({
                     let e = e.clone();
                     move |hovered: &bool, _, cx| {
@@ -1725,6 +1721,8 @@ fn user_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
                 .group("user-panel-avatar")
                 .hover(|s| s.bg(t(idx::BACKGROUND_MOD_NORMAL)))
                 .on_click(cx.listener(|a, _, w, cx| a.toggle_status_picker(w, cx)))
+                .child(crate::ui::avatar_deco::guard(crate::ui::avatar_deco::hover_key(3, 0)))
+                .child(crate::ui::states::hover_guard(crate::ui::states::key("user-panel-roll")))
                 .on_hover(cx.listener(|_, h: &bool, _, cx| {
                     let deco = crate::ui::avatar_deco::set_hover(crate::ui::avatar_deco::hover_key(3, 0), *h, cx);
                     if crate::ui::states::set_hover(crate::ui::states::key("user-panel-roll"), *h) || deco {

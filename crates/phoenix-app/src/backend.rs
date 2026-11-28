@@ -320,6 +320,12 @@ pub trait Backend: Send + Sync + 'static {
     fn logout(&self) -> BoxFuture<()> {
         Box::pin(async { Ok(()) })
     }
+    fn switch_account(&self, _id: u64) -> BoxFuture<ReadyData> {
+        Box::pin(async { Err(BackendError(crate::t!("backend.offline").to_string())) })
+    }
+    fn forget_account(&self, _id: u64) -> BoxFuture<()> {
+        Box::pin(async { Ok(()) })
+    }
     fn nav(&self, _req: crate::ui::home::data::NavRequest) -> BoxFuture<crate::ui::home::data::NavReply> {
         Box::pin(async { Err(BackendError(crate::t!("backend.offline").to_string())) })
     }

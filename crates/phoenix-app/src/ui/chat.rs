@@ -1455,6 +1455,7 @@ pub(crate) fn message(
             if crate::shortcuts::message::focused().is_some_and(|f| f.1 == id) { d.aria_active_descendant() } else { d }
         })
         .group("msg")
+        .child(crate::ui::avatar_deco::guard(crate::ui::avatar_deco::hover_key(2, id.0)))
         .on_hover({
             let e = entity.clone();
             move |h, _, cx| {

@@ -602,6 +602,35 @@ impl PhoenixApp {
         cx.notify();
     }
 
+    pub fn switch_account(&mut self, id: u64, cx: &mut Context<Self>) {
+        if id == self.me.id.0 {
+            return;
+        }
+        crate::ui::game_overlay::close(cx);
+        self.persist_chat_position();
+        let fut = self.backend.switch_account(id);
+        cx.spawn(async move |this, cx| {
+            let res = fut.await;
+            let _ = this.update(cx, |this, cx| {
+                match res {
+                    Ok(ready) => this.apply_ready(ready, cx),
+                    Err(e) if e.0 == crate::t!("accounts.switch_failed").as_ref() => {}
+                    Err(e) => {
+                        this.logout(cx);
+                        this.login_error = Some(e.0.into());
+                    }
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    pub fn add_account(&mut self, cx: &mut Context<Self>) {
+        crate::actions::close_modal();
+        self.logout(cx);
+    }
+
     pub fn apply_ready(&mut self, r: ReadyData, cx: &mut Context<Self>) {
         self.persist_chat_position();
         let mine = self.people.activities.remove(&r.me.id);

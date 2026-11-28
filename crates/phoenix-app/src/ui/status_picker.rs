@@ -76,17 +76,114 @@ const ITEMS: [(Presence, Option<&str>); 4] = [
 thread_local! {
     static STATUS_SUB: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
     static ACCOUNTS_SUB: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    static WALLET_SUB: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+fn set_wallet(v: bool, w: &mut Window) {
+    let a = ACCOUNTS_SUB.with(|c| c.replace(false));
+    let s = STATUS_SUB.with(|c| c.replace(false));
+    if WALLET_SUB.with(|c| c.replace(v)) != v || a || s {
+        w.refresh();
+    }
+}
+
+pub fn debug_open_wallet(v: bool) {
+    WALLET_SUB.with(|c| c.set(v));
+}
+
+const ORBS_HELP: &str = "https://support.discord.com/hc/articles/30593690165783-Discord-Orbs";
+
+fn orb_wallet(balance: u64, cx: &mut Context<PhoenixApp>) -> gpui::Stateful<gpui::Div> {
+    let cta = |id: &'static str, ic: &'static str, label: SharedString| crate::ui::controls::button_icon(id, ic, label, crate::ui::controls::BtnKind::Secondary).flex_1();
+    let quests = cta("wallet-quests", "quests", crate::t!("wallet.quests")).on_click(cx.listener(|a, _, w, cx| {
+        set_wallet(false, w);
+        a.people.close_overlays();
+        a.open_home_view(crate::ui::home::data::HomeView::Quests, cx);
+    }));
+    let shop = cta("wallet-shop", "shop", crate::t!("wallet.shop")).on_click(cx.listener(|a, _, w, cx| {
+        set_wallet(false, w);
+        a.people.close_overlays();
+        a.open_home_view(crate::ui::home::data::HomeView::Shop, cx);
+    }));
+    let header = div()
+        .px(z(16.))
+        .flex()
+        .flex_row()
+        .items_center()
+        .gap_x(z(12.))
+        .child(div().size(z(48.)).flex_none().flex().items_center().justify_center().child(svg().path(crate::icons::path("orbs")).size(z(40.)).text_color(c(tok(idx::TEXT_STRONG)))))
+        .child(
+            div()
+                .flex()
+                .flex_col()
+                .justify_center()
+                .gap_y(z(4.))
+                .child(
+                    div()
+                        .max_w(z(260.))
+                        .pr(z(20.))
+                        .overflow_hidden()
+                        .text_ellipsis()
+                        .whitespace_nowrap()
+                        .font_family(crate::fonts::HEADLINE)
+                        .text_size(z(32.))
+                        .line_height(z(34.))
+                        .font_weight(FontWeight::BOLD)
+                        .text_color(c(tok(idx::TEXT_STRONG)))
+                        .child(SharedString::from(balance.to_string())),
+                ),
+        );
+    let footer = div()
+        .px(z(16.))
+        .w_full()
+        .flex()
+        .flex_col()
+        .items_center()
+        .gap_y(z(16.))
+        .child(div().w_full().flex().flex_row().justify_center().gap_x(z(12.)).child(quests).child(shop))
+        .child(
+            div()
+                .id("wallet-help")
+                .cursor_pointer()
+                .text_size(z(12.))
+                .line_height(z(16.))
+                .text_color(c(tok(idx::TEXT_LINK)))
+                .hover(|s| s.underline())
+                .on_click(|_, _, cx| cx.open_url(ORBS_HELP))
+                .child(crate::t!("wallet.help")),
+        );
+    div()
+        .id("orb-wallet")
+        .occlude()
+        .w(z(340.))
+        .py(z(16.))
+        .flex()
+        .flex_col()
+        .items_start()
+        .rounded(z(8.))
+        .bg(c(tok(idx::BACKGROUND_BASE_LOW)))
+        .border_1()
+        .border_color(c(tok(idx::BORDER_SUBTLE)))
+        .shadow_lg()
+        .on_hover(|h, w, _| {
+            if !*h {
+                set_wallet(false, w)
+            }
+        })
+        .child(header)
+        .child(div().w_full().my(z(16.)).border_t_1().border_color(c(tok(idx::BORDER_SUBTLE))))
+        .child(footer)
 }
 
 fn set_sub(v: bool, w: &mut Window) {
-    let a = ACCOUNTS_SUB.with(|c| c.replace(false));
+    let a = ACCOUNTS_SUB.with(|c| c.replace(false)) | WALLET_SUB.with(|c| c.replace(false));
     if STATUS_SUB.with(|c| c.replace(v)) != v || a {
         w.refresh();
     }
 }
 
 fn set_accounts_sub(v: bool, w: &mut Window) {
-    let s = STATUS_SUB.with(|c| c.replace(false));
+    let s = STATUS_SUB.with(|c| c.replace(false)) | WALLET_SUB.with(|c| c.replace(false));
     if ACCOUNTS_SUB.with(|c| c.replace(v)) != v || s {
         w.refresh();
     }
@@ -99,7 +196,7 @@ pub fn debug_open_accounts_submenu(v: bool) {
 fn accounts_submenu(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> gpui::Stateful<gpui::Div> {
     let me = app.users.get(&app.me.id);
     let name = SharedString::from(app.me.name.to_string());
-    let row = |id: &'static str| {
+    let row = |id: (&'static str, u64)| {
         div()
             .id(id)
             .min_h(z(32.))
@@ -114,7 +211,7 @@ fn accounts_submenu(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> gpui::Sta
             .text_color(c(tok(idx::TEXT_STRONG)))
             .hover(|s| s.bg(c(tok(idx::INTERACTIVE_BACKGROUND_HOVER))))
     };
-    let account = row("acct-sub-me")
+    let account = row(("acct-sub-me", 0))
         .gap(z(8.))
         .child(crate::ui::avatar(me, 24.))
         .child(
@@ -134,7 +231,35 @@ fn accounts_submenu(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> gpui::Sta
             a.people.close_overlays();
             cx.notify();
         }));
-    let manage = row("acct-sub-manage").child(crate::t!("status.manage_accounts")).on_click(cx.listener(|a, _, w, cx| {
+    let others: Vec<_> = crate::saved_accounts::load().into_iter().filter(|a| a.id != app.me.id.0).collect();
+    let others = others.into_iter().map(|acct| {
+        let id = acct.id;
+        let user = crate::model::User {
+            id: crate::model::Id(acct.id),
+            name: acct.username.clone().into(),
+            display_name: acct.display_name().to_owned().into(),
+            avatar: acct.avatar_ref(),
+            bot: false,
+            verified_bot: false,
+            tag: None,
+            tag_guild: None,
+            nameplate: None,
+            name_style: None,
+            decoration: None,
+            flags: 0,
+        };
+        row(("acct-sub-other", id))
+            .gap(z(8.))
+            .child(crate::ui::avatar(Some(&user), 24.))
+            .child(div().flex_grow(1.).max_w(z(132.)).min_w_0().overflow_hidden().text_ellipsis().whitespace_nowrap().font_weight(FontWeight::NORMAL).child(user.display_name.clone()))
+            .on_click(cx.listener(move |a, _, w, cx| {
+                set_accounts_sub(false, w);
+                a.people.close_overlays();
+                a.switch_account(id, cx);
+            }))
+    });
+    let others: Vec<_> = others.collect();
+    let manage = row(("acct-sub-manage", 0)).child(crate::t!("status.manage_accounts")).on_click(cx.listener(|a, _, w, cx| {
         set_accounts_sub(false, w);
         a.open_switch_accounts(cx);
     }));
@@ -156,6 +281,7 @@ fn accounts_submenu(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> gpui::Sta
             }
         })
         .child(account)
+        .children(others)
         .child(div().h(z(1.)).my(z(8.)).bg(c(tok(idx::BORDER_SUBTLE))))
         .child(manage)
 }
@@ -349,12 +475,19 @@ fn render_inner(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixA
     }));
     let badges = hover_off("acct-badges", "ribbon", crate::t!("status.badges"))
         .on_click(cx.listener(|a, _, _, cx| a.stub(&crate::t!("status.badges"), cx)));
+    let wallet_open = WALLET_SUB.with(|c| c.get());
     let orbs = crate::ui::shop_page::orbs_balance(app, cx).map(|n| {
-        pop_row("acct-orbs", icon("orbs"), text(crate::t!("quests.orbs", n = n)), None, true).on_hover(|h, w, _| {
-            if *h {
-                set_sub(false, w)
-            }
-        })
+        pop_row("acct-orbs", icon("orbs"), text(crate::t!("quests.orbs", n = n)), None, true)
+            .relative()
+            .on_hover(|h, w, _| {
+                if *h {
+                    set_wallet(true, w)
+                }
+            })
+            .on_click(|_, w, _| set_wallet(!WALLET_SUB.with(|c| c.get()), w))
+            .when(wallet_open, |d| {
+                d.child(deferred(anchored().position_mode(gpui::AnchoredPositionMode::Local).position(point(px(252. + 12.), px(-16.))).snap_to_window().child(orb_wallet(n, cx))))
+            })
     });
     let accounts_open = ACCOUNTS_SUB.with(|c| c.get());
     let switch = pop_row("acct-switch", icon("user-circle"), text(crate::t!("status.switch_accounts")), None, true)

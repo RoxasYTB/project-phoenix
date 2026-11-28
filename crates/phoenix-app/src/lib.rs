@@ -34,6 +34,7 @@ pub mod paths;
 pub mod perf;
 pub mod presence;
 pub mod richtext;
+pub mod saved_accounts;
 pub mod search_highlight;
 pub mod shortcuts;
 pub mod sounds;

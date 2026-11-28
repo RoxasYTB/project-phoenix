@@ -40,6 +40,40 @@ mod tests {
 
 thread_local! {
     static HOVER: std::cell::Cell<Option<(u64, std::time::Instant)>> = const { std::cell::Cell::new(None) };
+    static PAINTED: std::cell::Cell<Option<(u64, u64)>> = const { std::cell::Cell::new(None) };
+}
+
+pub fn clear() {
+    HOVER.with(|h| h.set(None));
+}
+
+pub fn sweep(frame: u64) {
+    let Some((key, _)) = HOVER.with(|h| h.get()) else { return };
+    let seen = PAINTED.with(|p| p.get()).filter(|(k, _)| *k == key).map(|(_, f)| f);
+    if seen.is_none_or(|f| f + 1 < frame) {
+        clear();
+    }
+}
+
+pub fn guard(key: u64) -> gpui::AnyElement {
+    use gpui::{IntoElement, Styled};
+    gpui::canvas(
+        |bounds, window, _| window.insert_hitbox(bounds, gpui::HitboxBehavior::Normal),
+        move |_, hitbox, window, _| {
+            if hovered(key) {
+                PAINTED.with(|p| p.set(Some((key, crate::ui::states::frame()))));
+                if !hitbox.is_hovered(window) {
+                    clear();
+                    window.refresh();
+                }
+            }
+        },
+    )
+    .absolute()
+    .top_0()
+    .left_0()
+    .size_full()
+    .into_any_element()
 }
 
 pub const REDUCED_MOTION_HOVER_DELAY: std::time::Duration = std::time::Duration::from_secs(1);
@@ -68,6 +102,9 @@ pub fn hovered(key: u64) -> bool {
 
 pub fn set_hover(key: u64, hovered: bool, cx: &mut gpui::App) -> bool {
     let changed = store_hover(key, hovered);
+    if changed && hovered {
+        PAINTED.with(|p| p.set(Some((key, crate::ui::states::frame()))));
+    }
     if changed && hovered && crate::ui::settings::effects::reduced_motion() {
         crate::ui::chat::burst_tip::refresh_after(cx, REDUCED_MOTION_HOVER_DELAY);
     }

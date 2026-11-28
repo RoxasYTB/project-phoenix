@@ -129,6 +129,10 @@ fn mark_painted(key: u64) {
     PAINTED.with(|p| p.borrow_mut().insert(key, frame));
 }
 
+pub fn frame() -> u64 {
+    FRAME.with(|f| f.get())
+}
+
 pub fn begin_frame() {
     let frame = FRAME.with(|f| {
         let n = f.get() + 1;
@@ -139,6 +143,7 @@ pub fn begin_frame() {
     for key in gone {
         forget(key);
     }
+    crate::ui::avatar_deco::sweep(frame);
 }
 
 fn sweep(frame: u64) -> Vec<u64> {
@@ -153,6 +158,7 @@ fn sweep(frame: u64) -> Vec<u64> {
 }
 
 pub fn blur_all() {
+    crate::ui::avatar_deco::clear();
     let keys: Vec<u64> = HOVER.with(|h| h.borrow().iter().filter(|(_, s)| s.0).map(|(k, _)| *k).collect());
     for key in keys {
         forget(key);

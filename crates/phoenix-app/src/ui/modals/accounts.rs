@@ -70,18 +70,75 @@ fn account_card(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> gpui::Div {
     )
 }
 
+fn saved_card(acct: &crate::saved_accounts::SavedAccount, cx: &mut Context<PhoenixApp>) -> gpui::Div {
+    let id = acct.id;
+    let user = crate::model::User {
+        id: crate::model::Id(acct.id),
+        name: acct.username.clone().into(),
+        display_name: acct.display_name().to_owned().into(),
+        avatar: acct.avatar_ref(),
+        bot: false,
+        verified_bot: false,
+        tag: None,
+        tag_guild: None,
+        nameplate: None,
+        name_style: None,
+        decoration: None,
+        flags: 0,
+    };
+    let switch = button(("acct-switch-to", id), crate::t!("accounts.switch"), BtnKind::Secondary).on_click(cx.listener(move |a, _, _, cx| {
+        crate::actions::close_modal();
+        a.switch_account(id, cx);
+    }));
+    div().flex().px(z(16.)).py(z(12.)).border_t_1().border_color(c(tok(idx::BORDER_SUBTLE))).child(
+        div()
+            .w_full()
+            .flex()
+            .items_center()
+            .child(crate::ui::avatar(Some(&user), 40.))
+            .child(
+                div()
+                    .ml(z(8.))
+                    .max_w(gpui::relative(0.6))
+                    .min_w_0()
+                    .overflow_hidden()
+                    .text_ellipsis()
+                    .whitespace_nowrap()
+                    .text_size(z(16.))
+                    .line_height(z(20.))
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .text_color(c(tok(idx::TEXT_STRONG)))
+                    .child(user.display_name.clone()),
+            )
+            .child(div().ml_auto().flex().items_center().child(switch)),
+    )
+}
+
 pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElement {
-    let list = div().flex().flex_col().rounded(z(8.)).bg(c(tok(idx::BACKGROUND_MOD_SUBTLE))).child(account_card(app, cx));
+    let saved: Vec<_> = crate::saved_accounts::load().into_iter().filter(|a| a.id != app.me.id.0).collect();
+    let mut list = div().flex().flex_col().rounded(z(8.)).bg(c(tok(idx::BACKGROUND_MOD_SUBTLE))).child(account_card(app, cx));
+    for acct in &saved {
+        list = list.child(saved_card(acct, cx));
+    }
     let add = button("acct-add", crate::t!("status.add_account"), BtnKind::Secondary)
         .flex_1()
-        .on_click(cx.listener(|a, _, _, cx| a.stub(&crate::t!("status.add_account"), cx)));
+        .on_click(cx.listener(|a, _, _, cx| a.add_account(cx)));
     let footer = div().w_full().flex().child(add);
     let mut body = div().relative().pb(z(16.)).child(list);
     if let Some(pos) = MENU.with(|m| m.get()) {
         let e = cx.entity();
         let items = vec![MenuItem::danger(crate::t!("accounts.log_out"), None, move |_, _, cx: &mut App| {
             MENU.with(|m| m.set(None));
-            e.update(cx, |a, cx| a.stub(&crate::t!("accounts.log_out"), cx));
+            e.update(cx, |a, cx| {
+                let id = a.me.id.0;
+                let fut = a.backend.forget_account(id);
+                cx.spawn(async move |_, _| {
+                    let _ = fut.await;
+                })
+                .detach();
+                crate::actions::close_modal();
+                a.logout(cx);
+            });
         })];
         let dismiss: crate::ui::context_menu::Dismiss = std::rc::Rc::new(|w, _| {
             MENU.with(|m| m.set(None));
