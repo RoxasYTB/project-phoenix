@@ -397,6 +397,20 @@ fn main() -> anyhow::Result<()> {
         })?;
         pump(&mut cx, 10);
     }
+    if std::env::var_os("PHX_UPDATE_MOCK").is_some() {
+        phoenix_app::updater::set_mock_available(phoenix_app::updater::ReleaseInfo {
+            tag: "v0.2.0-beta.4".into(),
+            name: "Discord Phoenix v0.2.0-beta.4".into(),
+            body: String::new(),
+            html_url: String::new(),
+            prerelease: true,
+            published_at: "2026-11-28T12:00:00Z".into(),
+            asset: None,
+            sha256sums_url: None,
+        });
+        cx.update_window(win.into(), |_, window, _| window.refresh())?;
+        pump(&mut cx, 4);
+    }
     if let Some((x, y)) = std::env::var("PHX_MOUSE").ok().and_then(|v| {
         let (x, y) = v.split_once(',')?;
         Some((x.trim().parse::<f32>().ok()?, y.trim().parse::<f32>().ok()?))

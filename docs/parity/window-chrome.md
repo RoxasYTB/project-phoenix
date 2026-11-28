@@ -14,6 +14,7 @@ CSS: ~/discord-phoenix-ref/current-client/css/300559.*.css. Dump: vanilla-guild-
 | glyph | dump #48/#50/#52 | box | 12×12 | glyph_box | ✅ |
 | minimize glyph | dump #48 | shape | 10×1 rect at (1,6) | win-min-g | ✅ |
 | maximize glyph | dump #50 | shape | 9×9 rect at 1.5, 1px stroke | win-max-g (10×10 border) | ✅ |
+| update button | `aT` render (web.55063002, AutoUpdateStore `UPDATE_AVAILABLE`/`UPDATE_DOWNLOADED`/`UPDATE_MANUALLY`) | component / icon color / tooltip | same header-bar icon as Inbox and Help (`an.A`, gray `--background-mod-normal` hover), `color: GREEN_360`, `DownloadIcon`, tooltip `u18OXF` "Update Ready!" | `bar_button_tinted("title-update", Download, GREEN_360)` | ✅ (28/11) |
 | close glyph | dump #52 | shape | 10×10 cross | assets `icons/window/close.svg` (own drawing) | ✅ |
 | color | `winButtons_` | color | `--interactive-text-default` | fg | ✅ |
 | min/max hover | `winButtonMinMax_:hover` | bg / color | `--interactive-background-hover` / `--interactive-text-hover` | hover + group_hover | ✅ |

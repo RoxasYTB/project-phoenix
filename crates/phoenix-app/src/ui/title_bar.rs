@@ -29,6 +29,10 @@ fn title(app: &PhoenixApp) -> Option<(Icon, SharedString)> {
 }
 
 fn bar_button(id: &'static str, i: Icon, active: bool, tip: SharedString) -> gpui::Stateful<gpui::Div> {
+    bar_button_tinted(id, i, tok(if active { idx::INTERACTIVE_ICON_ACTIVE } else { idx::ICON_MUTED }), tip)
+}
+
+fn bar_button_tinted(id: &'static str, i: Icon, color: u32, tip: SharedString) -> gpui::Stateful<gpui::Div> {
     div()
         .id(id)
         .debug_selector(move || id.to_owned())
@@ -43,7 +47,7 @@ fn bar_button(id: &'static str, i: Icon, active: bool, tip: SharedString) -> gpu
         .occlude()
         .cursor_pointer()
         .hover(|s| s.bg(c(tok(idx::BACKGROUND_MOD_NORMAL))))
-        .child(icon(i, 18. * zoom(), c(tok(if active { idx::INTERACTIVE_ICON_ACTIVE } else { idx::ICON_MUTED }))))
+        .child(icon(i, 18. * zoom(), c(color)))
         .tip(tip)
 }
 
@@ -202,20 +206,7 @@ pub fn render(app: &PhoenixApp, window: &gpui::Window, cx: &mut Context<PhoenixA
                 .gap(z(12.))
                 .when(crate::updater::available_release().is_some(), |d| {
                     d.child(
-                        div()
-                            .id("title-update")
-                            .debug_selector(|| "title-update".to_owned())
-                            .size(z(24.))
-                            .flex_none()
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .rounded(z(m::TITLE_BAR_ITEM_RADIUS))
-                            .occlude()
-                            .cursor_pointer()
-                            .hover(|s| s.bg(c(tok(idx::BACKGROUND_FEEDBACK_WARNING))))
-                            .child(icon(Icon::Download, 18. * zoom(), c(tok(idx::ICON_FEEDBACK_WARNING))))
-                            .tip(crate::t!("update.titlebar_tip"))
+                        bar_button_tinted("title-update", Icon::Download, tok(idx::GREEN_360), crate::t!("update.titlebar_tip"))
                             .on_click(cx.listener(|_, _, w, cx| {
                                 crate::actions::open_modal(crate::ui::modals::Modal::Update, Some(w));
                                 cx.notify();
