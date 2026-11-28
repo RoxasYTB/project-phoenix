@@ -114,6 +114,47 @@ fn main() -> anyhow::Result<()> {
                             app.toggle_pins(cx);
                         }
                     }
+                    m if m.starts_with("modal-") => {
+                        use phoenix_app::ui::modals::{self, Modal};
+                        let g = app.guilds.first().map(|g| g.id);
+                        app.select_guild(g, cx);
+                        let ch = app.selected_channel;
+                        let user = app.users.keys().copied().find(|u| *u != app.me.id);
+                        match &m["modal-".len()..] {
+                            "shortcuts" => phoenix_app::shortcuts::open_help(),
+                            "delete" => {
+                                if let Some(ch) = ch {
+                                    let id = app.messages.get(&ch).and_then(|x| x.msgs.last()).map(|m| m.id);
+                                    app.chat.confirm_delete = id.map(|id| (ch, id));
+                                }
+                            }
+                            "poll" => {
+                                if let Some(ch) = ch {
+                                    phoenix_app::actions::open_modal(Modal::CreatePoll(modals::poll_create::State::new(ch)), Some(&mut *window));
+                                }
+                            }
+                            "report" => app.open_report(phoenix_api::rest::reporting::ReportTarget::Guild { guild: phoenix_api::models::Snowflake(g.map_or(1, |g| g.0)) }, cx),
+                            "golive" => modals::go_live::open(Some(&mut *window)),
+                            "follow" => {
+                                if let Some(ch) = ch {
+                                    modals::follow::open(ch, window);
+                                }
+                            }
+                            "ignore" => {
+                                if let Some(u) = user {
+                                    phoenix_app::actions::open_modal(Modal::Ignore(u), Some(&mut *window));
+                                }
+                            }
+                            "tag" => {
+                                if let Some(g) = g {
+                                    phoenix_app::actions::open_modal(Modal::GuildTagAdopt(g), Some(&mut *window));
+                                }
+                            }
+                            "accounts" => phoenix_app::actions::open_modal(Modal::SwitchAccounts, Some(&mut *window)),
+                            "update" => phoenix_app::actions::open_modal(Modal::Update, Some(&mut *window)),
+                            _ => phoenix_app::actions::open_modal(Modal::BurstUpsell, Some(&mut *window)),
+                        }
+                    }
                     "members" => {
                         let g = app.guilds.first().map(|g| g.id);
                         app.select_guild(g, cx);

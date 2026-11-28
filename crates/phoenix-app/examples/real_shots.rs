@@ -1493,6 +1493,14 @@ fn main() -> anyhow::Result<()> {
                     });
                 }
                 "pins" => app.toggle_pins(cx),
+                "pinconfirm" => {
+                    if let Some((ch, id)) = writable_target(app) {
+                        let m = app.messages.get(&ch).and_then(|x| x.msgs.iter().find(|m| m.id == id).cloned());
+                        if let Some(m) = m {
+                            app.request_pin_message(ch, m, false, cx);
+                        }
+                    }
+                }
                 "acct" => {
                     use phoenix_app::ui::modals::account_edit::{Confirm, EmailStep, Flow};
                     let flow = match arg.as_str() {
