@@ -34,7 +34,7 @@ const LINES: &[&str] = &[
     "> quoting for posterity\nthat's a hot take",
     "```rust\nfn main() {\n    println!(\"hello from phoenix\");\n}\n```",
     "||spoiler: it was the borrow checker all along||",
-    "anyone up for voice later? <@1>",
+    "anyone up for voice later? <@1> <#1012> or <#1014>",
     "I pushed a fix to <#1003>, take a look",
     "__underlined__ and ~~struck~~ text works too",
     "brb",

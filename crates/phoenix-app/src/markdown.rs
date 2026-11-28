@@ -51,6 +51,39 @@ pub struct Span {
 pub struct Inline {
     pub text: String,
     pub spans: Vec<Span>,
+    pub channel_icons: Vec<(usize, &'static str)>,
+}
+
+pub const MENTION_ICONS: [&str; 14] = [
+    "hash", "lock", "text-nsfw", "speaker", "voice-nsfw", "megaphone", "announcement-nsfw", "forum", "forum-nsfw", "image", "media-nsfw", "stage", "threads", "chat",
+];
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct MentionChannel {
+    pub kind: Option<crate::model::ChannelKind>,
+    pub thread: bool,
+    pub forum_post: bool,
+    pub nsfw: bool,
+    pub connect_denied: bool,
+    pub media: bool,
+}
+
+pub fn mention_icon(c: MentionChannel) -> &'static str {
+    use crate::model::ChannelKind as K;
+    if c.thread {
+        return if c.forum_post { "chat" } else { "threads" };
+    }
+    match c.kind {
+        Some(K::Voice) if c.connect_denied => "lock",
+        Some(K::Voice) if c.nsfw => "voice-nsfw",
+        Some(K::Voice) => "speaker",
+        Some(K::Stage) if c.connect_denied => "lock",
+        Some(K::Stage) => "stage",
+        Some(K::Forum) if c.media => if c.nsfw { "media-nsfw" } else { "image" },
+        Some(K::Forum) => if c.nsfw { "forum-nsfw" } else { "forum" },
+        Some(K::Announcement) => if c.nsfw { "announcement-nsfw" } else { "megaphone" },
+        _ => if c.nsfw { "text-nsfw" } else { "hash" },
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -126,6 +159,9 @@ fn relative(delta: i64) -> String {
 pub trait MentionResolver {
     fn user(&self, id: u64) -> Option<String>;
     fn channel(&self, id: u64) -> Option<String>;
+    fn mention_channel(&self, _id: u64) -> Option<MentionChannel> {
+        None
+    }
     fn role(&self, _id: u64) -> Option<String> {
         None
     }
@@ -452,6 +488,12 @@ impl Ctx<'_> {
                 } else {
                     None
                 };
+                if let Some((Mention::Channel(id), _)) = &parsed
+                    && let Some(mc) = self.r.mention_channel(*id)
+                {
+                    let at = self.out.text.len() + src[plain_start..i].len();
+                    self.out.channel_icons.push((at, mention_icon(mc)));
+                }
                 if let Some((m, label)) = parsed {
                     self.push(&src[plain_start..i], style, spoiler);
                     self.push_full(&label, style | Style::MENTION, None, Some(m), spoiler);
@@ -773,12 +815,64 @@ mod tests {
         fn channel(&self, id: u64) -> Option<String> {
             (id == 7).then(|| "general".into())
         }
+        fn mention_channel(&self, id: u64) -> Option<MentionChannel> {
+            (id == 8).then_some(MentionChannel { kind: Some(crate::model::ChannelKind::Voice), ..Default::default() })
+        }
         fn soundboard(&self, guild_id: u64, sound_id: u64) -> Option<SoundboardMention> {
             (guild_id == 9 && sound_id == 77).then(|| SoundboardMention {
                 name: "Chime".into(),
                 emoji_name: Some("🎵".into()),
             })
         }
+    }
+
+    #[test]
+    fn channel_mention_icon_follows_channel_type() {
+        use crate::model::ChannelKind as K;
+        let m = |kind, f: fn(&mut MentionChannel)| {
+            let mut c = MentionChannel { kind: Some(kind), ..Default::default() };
+            f(&mut c);
+            mention_icon(c)
+        };
+        assert_eq!(m(K::Voice, |_| {}), "speaker");
+        assert_eq!(m(K::Voice, |c| c.nsfw = true), "voice-nsfw");
+        assert_eq!(m(K::Voice, |c| c.connect_denied = true), "lock");
+        assert_eq!(m(K::Stage, |_| {}), "stage");
+        assert_eq!(m(K::Stage, |c| c.connect_denied = true), "lock");
+        assert_eq!(m(K::Text, |_| {}), "hash");
+        assert_eq!(m(K::Text, |c| c.nsfw = true), "text-nsfw");
+        assert_eq!(m(K::Announcement, |_| {}), "megaphone");
+        assert_eq!(m(K::Announcement, |c| c.nsfw = true), "announcement-nsfw");
+        assert_eq!(m(K::Forum, |_| {}), "forum");
+        assert_eq!(m(K::Forum, |c| c.nsfw = true), "forum-nsfw");
+        assert_eq!(m(K::Forum, |c| c.media = true), "image");
+        assert_eq!(m(K::Forum, |c| (c.media, c.nsfw) = (true, true)), "media-nsfw");
+        assert_eq!(m(K::Text, |c| c.thread = true), "threads");
+        assert_eq!(m(K::Text, |c| (c.thread, c.forum_post) = (true, true)), "chat");
+        for k in [K::Voice, K::Stage, K::Text, K::Announcement, K::Forum] {
+            for bits in 0..32u8 {
+                let c = MentionChannel {
+                    kind: Some(k),
+                    thread: bits & 1 != 0,
+                    forum_post: bits & 2 != 0,
+                    nsfw: bits & 4 != 0,
+                    connect_denied: bits & 8 != 0,
+                    media: bits & 16 != 0,
+                };
+                assert!(MENTION_ICONS.contains(&mention_icon(c)));
+            }
+        }
+    }
+
+    #[test]
+    fn voice_channel_mention_records_its_icon() {
+        let mut sp = 0;
+        let i = parse_inline("join **now** <#8> or <#7>", &R, &mut sp);
+        let voice = i.text.find('#').unwrap();
+        assert_eq!(i.channel_icons, vec![(voice, "speaker")]);
+        let rt = crate::richtext::rich_inline(&i, &|_| false, gpui::Hsla::default());
+        let tokens: Vec<_> = rt.emoji.iter().map(|(r, t)| (r.start, crate::richtext::channel_icon_name(t))).collect();
+        assert_eq!(tokens, vec![(voice, Some("speaker")), (i.text.rfind('#').unwrap(), Some("hash"))]);
     }
 
     #[test]

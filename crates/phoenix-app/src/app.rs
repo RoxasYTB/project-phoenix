@@ -201,6 +201,23 @@ impl MentionResolver for Resolver<'_> {
     fn current_guild(&self) -> Option<u64> {
         self.guild.map(|g| g.0)
     }
+    fn mention_channel(&self, id: u64) -> Option<crate::markdown::MentionChannel> {
+        let ch = self.channels.get(&Id(id)).or_else(|| self.nav.find_thread(Id(id)))?;
+        let parent = ch
+            .parent
+            .or_else(|| self.nav.thread_parent(ch.id))
+            .and_then(|p| self.channels.get(&p))
+            .filter(|p| p.kind != ChannelKind::Category);
+        let extra = self.nav.extras.get(&ch.id);
+        Some(crate::markdown::MentionChannel {
+            kind: Some(ch.kind),
+            thread: parent.is_some(),
+            forum_post: parent.is_some_and(|p| p.kind == ChannelKind::Forum),
+            nsfw: extra.is_some_and(|e| e.nsfw),
+            connect_denied: extra.is_some_and(|e| e.connect_denied),
+            media: extra.is_some_and(|e| e.media),
+        })
+    }
     fn link_channel(&self, id: u64) -> Option<crate::markdown::LinkChannel> {
         let ch = self.channels.get(&Id(id)).or_else(|| self.nav.find_thread(Id(id)))?;
         let parent = ch.parent.and_then(|p| self.channels.get(&p)).filter(|p| p.kind != ChannelKind::Category);

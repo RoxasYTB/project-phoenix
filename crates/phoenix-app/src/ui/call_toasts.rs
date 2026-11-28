@@ -113,6 +113,7 @@ pub fn joined_inline(blocks: &[Block]) -> Inline {
             Block::Code { code, .. } => Inline {
                 text: code.clone(),
                 spans: vec![Span { range: 0..code.len(), style: Style::CODE, link: None, mention: None, spoiler: None }],
+                channel_icons: Vec::new(),
             },
             other => other.inline().cloned().unwrap_or_default(),
         };
@@ -125,6 +126,7 @@ pub fn joined_inline(blocks: &[Block]) -> Inline {
             out.spans.push(Span { range: at..at + 1, style: Style::PLAIN, link: None, mention: None, spoiler: None });
         }
         let off = out.text.len();
+        out.channel_icons.extend(piece.channel_icons.iter().map(|(at, n)| (at + off, *n)));
         out.text.push_str(&piece.text.replace(['\n', '\r'], " "));
         out.spans.extend(piece.spans.into_iter().map(|mut sp| {
             sp.range = sp.range.start + off..sp.range.end + off;

@@ -48,6 +48,8 @@ pub struct ChannelExtra {
     pub thread_archived: bool,
     pub thread_locked: bool,
     pub can_manage_threads: bool,
+    pub connect_denied: bool,
+    pub media: bool,
 }
 
 #[derive(Clone, Debug, Default)]

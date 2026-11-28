@@ -1078,13 +1078,13 @@ pub fn rich_with_emoji_scaled(
             continue;
         }
         row = push_lines(row, last..r.start, &mut seg);
-        if token.as_ref() == crate::richtext::CHANNEL_ICON_TOKEN {
+        if let Some(name) = crate::richtext::channel_icon_name(token) {
             let icon = div()
                 .h(z(22. * k))
                 .flex()
                 .items_center()
                 .pr(z(4.))
-                .child(crate::ui::icon(crate::assets::Icon::Hash, 16. * k, runs_fg_at(runs, r.end)));
+                .child(gpui::svg().path(crate::icons::path(name)).flex_none().size(z(16. * k)).text_color(runs_fg_at(runs, r.end)));
             seg += 1;
             row = row.child(pill(icon.into_any_element(), r, seg as u64));
             last = r.end;

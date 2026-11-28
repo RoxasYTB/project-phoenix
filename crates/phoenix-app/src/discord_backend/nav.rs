@@ -282,6 +282,8 @@ fn extra(cache: &Cache, c: &api::Channel) -> ChannelExtra {
         thread_archived: c.thread_metadata.as_ref().is_some_and(|m| m.archived),
         thread_locked: locked_thread,
         can_manage_threads: perms.contains(api::Permissions::MANAGE_THREADS),
+        connect_denied: c.kind.is_voice() && !perms.is_empty() && !perms.contains(api::Permissions::CONNECT),
+        media: c.kind == api::ChannelType::GuildMedia,
         nsfw: c.nsfw,
         locked: everyone_denied(c),
         group_icon: c

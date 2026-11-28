@@ -16,6 +16,19 @@ use crate::{
 pub const CHANNEL_ICON_TOKEN: &str = "\u{1}channel-icon";
 pub const LINK_TOKEN: &str = "\u{1}link:";
 
+pub fn channel_icon_token(name: &str) -> String {
+    if name == "hash" { CHANNEL_ICON_TOKEN.to_owned() } else { format!("{CHANNEL_ICON_TOKEN}:{name}") }
+}
+
+pub fn channel_icon_name(token: &str) -> Option<&'static str> {
+    let rest = token.strip_prefix(CHANNEL_ICON_TOKEN)?;
+    if rest.is_empty() {
+        return Some("hash");
+    }
+    let name = rest.strip_prefix(':')?;
+    markdown::MENTION_ICONS.iter().copied().find(|n| *n == name)
+}
+
 pub fn link_token(icon: &markdown::LinkIcon) -> String {
     match icon {
         markdown::LinkIcon::Channel(name) => format!("{LINK_TOKEN}icon:{name}"),
@@ -236,7 +249,8 @@ pub fn rich_inline(inline: &Inline, revealed: &dyn Fn(usize) -> bool, base: Hsla
         emoji_ranges(&inline.text).into_iter().filter(|(r, _)| !in_code(r) && !in_mention(r)).collect();
     for s in &inline.spans {
         if matches!(s.mention, Some(Mention::Channel(_))) && inline.text[s.range.clone()].starts_with('#') {
-            emoji.push((s.range.start..s.range.start + 1, CHANNEL_ICON_TOKEN.into()));
+            let name = inline.channel_icons.iter().find(|(at, _)| *at == s.range.start).map_or("hash", |(_, n)| *n);
+            emoji.push((s.range.start..s.range.start + 1, channel_icon_token(name).into()));
         }
         if let Some(Mention::Link(l)) = &s.mention {
             for (r, icon) in &l.icons {
@@ -422,6 +436,7 @@ pub fn highlighted_inline(segments: &[(String, bool)], r: &dyn MentionResolver, 
             marks.push(range);
         } else {
             let part = markdown::parse_inline_without_links(text, r, &mut spoilers);
+            inline.channel_icons.extend(part.channel_icons.iter().map(|(p, n)| (p + at, *n)));
             inline.text.push_str(&part.text);
             inline.spans.extend(part.spans.into_iter().map(|mut s| {
                 s.range = s.range.start + at..s.range.end + at;

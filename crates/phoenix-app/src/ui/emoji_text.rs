@@ -201,7 +201,7 @@ pub fn rich_static(t: &crate::richtext::RichText, font_px: f32, emoji_px: f32) -
     let mut row = div().flex().flex_wrap().items_center().min_w_0().text_size(crate::theme::fz(font_px));
     let mut last = 0;
     for (r, token) in &t.emoji {
-        if r.start < last || token.as_ref() == crate::richtext::CHANNEL_ICON_TOKEN {
+        if r.start < last || crate::richtext::channel_icon_name(token).is_some() {
             continue;
         }
         if let Some(icon) = crate::richtext::parse_link_token(token) {
