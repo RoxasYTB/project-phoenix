@@ -419,7 +419,7 @@ fn meter_row() -> AnyElement {
         .flex()
         .flex_col()
         .child(div().p(z(8.)).text_size(z(14.)).line_height(z(18.)).font_weight(gpui::FontWeight::MEDIUM).text_color(t(idx::TEXT_STRONG)).child(crate::t!("voice.input_level_menu")))
-        .child(div().px(z(8.)).pb(z(8.)).flex().child(crate::ui::settings::voice::meter_bar(level.map_or(crate::ui::settings::voice::DB_MIN, |(db, _)| db), level.is_some(), 28.)))
+        .child(div().px(z(8.)).pb(z(8.)).flex().child(crate::ui::settings::voice::meter_bar(level.map_or(crate::ui::settings::voice::DB_MIN, |(db, _)| db), level.is_some(), 28., idx::BACKGROUND_SURFACE_HIGHER)))
         .when(level.is_some(), |d| d.child(gpui::canvas(|_, _, _| {}, |_, _, w, _| w.request_animation_frame()).size_0()))
         .into_any_element()
 }

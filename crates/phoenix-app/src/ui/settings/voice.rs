@@ -374,7 +374,7 @@ fn button(id: &'static str, label: SharedString, bg: u32, _hover: u32) -> gpui::
     crate::ui::controls::button(id, label, kind)
 }
 
-pub fn meter_bar(level_db: f32, active: bool, height: f32) -> Div {
+pub fn meter_bar(level_db: f32, active: bool, height: f32, frame: usize) -> Div {
     let frac = if active { ((level_db - DB_MIN) / -DB_MIN).clamp(0., 1.) } else { 0. };
     div().flex_1().h(z(height)).child(
         gpui::canvas(
@@ -388,7 +388,7 @@ pub fn meter_bar(level_db: f32, active: bool, height: f32) -> Div {
                 }
                 let width = n as f32 * cell;
                 let lit = n - ((n as f32 * (1. - frac)).round() as usize).min(n);
-                window.paint_quad(gpui::fill(gpui::Bounds::new(b.origin, gpui::size(gpui::px(width), b.size.height)), c(tok(idx::BACKGROUND_BASE_LOW))));
+                window.paint_quad(gpui::fill(gpui::Bounds::new(b.origin, gpui::size(gpui::px(width), b.size.height)), c(tok(frame))));
                 let (from, to) = (gpui::Rgba::from(c(tok(idx::YELLOW_260))), gpui::Rgba::from(c(tok(idx::GREEN_360))));
                 let inset = f32::from(z(2.));
                 for i in 0..n {
@@ -731,7 +731,7 @@ fn mic_test_controls(place: MicTestPlace, in_call: bool, cx: &mut Cx) -> Div {
                         cx.notify();
                     })),
                 )
-                .child(meter_bar(level, testing || in_call, if compact { 18. } else { 28. })),
+                .child(meter_bar(level, testing || in_call, if compact { 18. } else { 28. }, idx::BACKGROUND_BASE_LOW)),
         )
         .when(compact && testing, |d| {
             d.child(
