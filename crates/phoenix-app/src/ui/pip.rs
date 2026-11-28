@@ -243,6 +243,11 @@ fn store(s: Saved) {
     }
 }
 
+pub fn position() -> (f32, f32) {
+    let m = MOTION.with(Cell::get);
+    (m.x.pos as f32, m.y.pos as f32)
+}
+
 pub fn width() -> f32 {
     saved().width
 }
