@@ -584,7 +584,8 @@ fn message_menu(app: &PhoenixApp, m: super::state::MenuState, cx: &mut Context<P
     context_menu::render(m.pos, items, dismiss)
 }
 
-fn message_card(app: &PhoenixApp, m: &Message) -> gpui::Div {
+fn message_card(app: &PhoenixApp, m: &Message, cx: &mut Context<PhoenixApp>) -> gpui::Div {
+    let e = cx.entity();
     let u = app.users.get(&m.author);
     div()
         .p(z(12.))
@@ -635,9 +636,9 @@ fn message_card(app: &PhoenixApp, m: &Message) -> gpui::Div {
                         .line_height(z(22.))
                         .text_color(c(Palette::TEXT_NORMAL))
                         .child(if m.content.is_empty() && !m.attachments.is_empty() {
-                            crate::t!("msg.attachments", n = m.attachments.len())
+                            crate::t!("msg.attachments", n = m.attachments.len()).into_any_element()
                         } else {
-                            m.content.clone()
+                            crate::ui::components::markdown_in(app, &m.content, &e, m.id).into_any_element()
                         }),
                 ),
         )
@@ -654,7 +655,7 @@ fn delete_modal(app: &PhoenixApp, ch: crate::model::Id, id: crate::model::Id, cx
             .into_any_element(),
     ];
     if let Some(m) = msg {
-        body.push(message_card(app, m).shadow_md().into_any_element());
+        body.push(message_card(app, m, cx).shadow_md().into_any_element());
     }
     modal::confirm(modal::Confirm {
         title: crate::t!("msg.delete"),
@@ -684,7 +685,7 @@ fn pin_modal(app: &PhoenixApp, ch: crate::model::Id, msg: &Message, cx: &mut Con
         crate::t!("msg.pin_confirm")
     };
     let mut body: Vec<AnyElement> = vec![div().text_size(z(16.)).child(subtitle).into_any_element()];
-    body.push(message_card(app, msg).shadow_md().into_any_element());
+    body.push(message_card(app, msg, cx).shadow_md().into_any_element());
     if unpin {
         body.push(
             div()
