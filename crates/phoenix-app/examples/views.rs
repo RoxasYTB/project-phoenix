@@ -89,6 +89,41 @@ fn main() -> anyhow::Result<()> {
                         let channel = app.selected_channel.unwrap_or_default();
                         pickers::open(app, pickers::Tab::Emoji, pickers::EmojiTarget::Reaction { channel, message: phoenix_app::model::Id(1) }, window, cx);
                     }
+                    m if m.starts_with("rtip-") => {
+                        use phoenix_app::model::{Id, Reaction};
+                        let g = app.guilds.first().map(|g| g.id);
+                        app.select_guild(g, cx);
+                        let ch = app.selected_channel.unwrap_or_default();
+                        let variant = m["rtip-".len()..].to_string();
+                        let custom = variant.starts_with("custom");
+                        let burst = variant == "burst";
+                        let count = match variant.as_str() {
+                            "1" | "custom" | "custom-open" => 1,
+                            "2" => 2,
+                            "3" => 3,
+                            _ => 7,
+                        };
+                        let r = Reaction {
+                            emoji: if custom { "<:phoenix:1374100000000000042>".into() } else { "😅".into() },
+                            emoji_id: custom.then_some(Id(1374100000000000042)),
+                            count: if burst { 0 } else { count },
+                            burst_count: if burst { count } else { 0 },
+                            ..Default::default()
+                        };
+                        let picked = app.messages.get_mut(&ch).and_then(|x| {
+                            let m = x.msgs.iter_mut().rev().nth(1)?;
+                            m.reactions = vec![r.clone()];
+                            Some(m.id)
+                        });
+                        if let Some(id) = picked {
+                            let key = phoenix_app::ui::chat::burst_tip::pill_key(ch, id, &r, burst);
+                            phoenix_app::ui::states::set_hover(key, true);
+                            phoenix_app::ui::chat::burst_tip::load_names(app, ch, id, &r, burst, cx);
+                            if variant == "custom-open" {
+                                phoenix_app::ui::chat::reaction_emoji::expand(key, app, 1374100000000000042, cx);
+                            }
+                        }
+                    }
                     "gif" => pickers::open(app, pickers::Tab::Gif, pickers::EmojiTarget::Composer, window, cx),
                     "sticker" => pickers::open(app, pickers::Tab::Sticker, pickers::EmojiTarget::Composer, window, cx),
                     "friends" => app.select_guild(None, cx),
@@ -448,6 +483,13 @@ fn main() -> anyhow::Result<()> {
         });
         cx.update_window(win.into(), |_, window, _| window.refresh())?;
         pump(&mut cx, 4);
+    }
+    if scene.starts_with("rtip-") {
+        std::thread::sleep(Duration::from_millis(900));
+        for _ in 0..4 {
+            cx.update_window(win.into(), |_, window, _| window.refresh())?;
+            pump(&mut cx, 4);
+        }
     }
     if let Some((x, y)) = std::env::var("PHX_MOUSE").ok().and_then(|v| {
         let (x, y) = v.split_once(',')?;

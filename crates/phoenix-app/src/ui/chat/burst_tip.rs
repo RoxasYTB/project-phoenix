@@ -56,6 +56,7 @@ pub fn tip_key(pill: u64) -> u64 {
 }
 
 pub fn dismiss(pill: u64) {
+    super::reaction_emoji::collapse(pill);
     if SHOWN.get() == Some(pill) {
         SHOWN.set(None);
     }
@@ -221,6 +222,37 @@ fn body_text(s: impl Into<SharedString>) -> gpui::Div {
     div().text_size(z(14.)).line_height(z(18.)).font_weight(FontWeight::NORMAL).text_color(c(tok(idx::TEXT_DEFAULT))).child(s.into())
 }
 
+pub fn others_label(n: u32) -> Option<SharedString> {
+    let ns = n.to_string();
+    match n {
+        0 => None,
+        1 => Some(crate::i18n::t("reaction.tip_others_one", &[("n", ns.as_str())])),
+        _ => Some(crate::i18n::t("reaction.tip_others", &[("n", ns.as_str())])),
+    }
+}
+
+pub fn link_range(line: &str, others: Option<&str>) -> Option<std::ops::Range<usize>> {
+    let o = others?;
+    let at = line.rfind(o)?;
+    Some(at..at + o.len())
+}
+
+fn tip_text(line: SharedString, others: Option<SharedString>, hovered: bool) -> gpui::Div {
+    let text = SharedString::from(format!("\u{200E}{line}"));
+    let styled = match link_range(&text, others.as_deref()) {
+        Some(range) => gpui::StyledText::new(text.clone()).with_highlights([(
+            range,
+            gpui::HighlightStyle {
+                color: Some(c(tok(idx::TEXT_LINK))),
+                underline: hovered.then(|| gpui::UnderlineStyle { thickness: gpui::px(1.), color: Some(c(tok(idx::TEXT_LINK))), wavy: false }),
+                ..Default::default()
+            },
+        )]),
+        None => gpui::StyledText::new(text.clone()),
+    };
+    div().text_size(z(14.)).line_height(z(18.)).font_weight(FontWeight::NORMAL).text_color(c(tok(idx::TEXT_DEFAULT))).child(styled)
+}
+
 fn nitro_icon() -> gpui::Svg {
     gpui::svg().path(crate::icons::path("nitro")).size(z(24.)).flex_none().mr(z(5.)).text_color(c(tok(idx::TEXT_DEFAULT)))
 }
@@ -230,6 +262,7 @@ pub fn layer(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message, r: &R
     let tip = tip_key(pill);
     let shown = SHOWN.get() == Some(pill);
     if !visible(crate::ui::states::state(pill), crate::ui::states::state(tip), shown, show_after(burst)) {
+        super::reaction_emoji::collapse(pill);
         if shown {
             SHOWN.set(None);
         }
@@ -248,6 +281,12 @@ pub fn layer(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message, r: &R
         return None;
     };
     SHOWN.set(Some(pill));
+    let inner_key = crate::ui::states::key(("reaction-tip-inner", pill));
+    let shown_names = CACHE.with_borrow(|cache| match cache.iter().find(|entry| entry.key.0 == pill).map(|entry| &entry.state) {
+        Some(Preview::Ready(users)) => names(app, msg, users).len() as u32,
+        _ => 0,
+    });
+    let others = others_label((if burst { r.burst_count } else { r.count }).saturating_sub(shown_names));
     let premium = app.backend.has_premium();
     let (ch, id) = (msg.channel, msg.id);
     let e_open = entity.clone();
@@ -265,7 +304,12 @@ pub fn layer(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message, r: &R
         .flex()
         .items_center()
         .child(div().size(z(EMOJI)).flex_none().child(crate::media::emoji::emoji_element(&r.emoji, EMOJI)))
-        .child(body_text(format!("\u{200E}{line}")).ml(z(12.)).flex_1().min_w_0())
+        .on_hover(move |on, window, _| {
+            if crate::ui::states::set_hover(inner_key, *on) {
+                window.refresh();
+            }
+        })
+        .child(tip_text(line, others, crate::ui::states::hovered(inner_key)).ml(z(12.)).flex_1().min_w_0())
         .on_click(move |_, window, cx| {
             cx.stop_propagation();
             dismiss(pill);
@@ -327,7 +371,8 @@ pub fn layer(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message, r: &R
         })
         .child(inner)
         .child(crate::ui::states::hover_guard(tip))
-        .children(footer);
+        .children(footer)
+        .children(super::reaction_emoji::block(app, entity, pill, &r.emoji));
     let top = f32::from(b.origin.y);
     let mid = f32::from(b.origin.x + b.size.width / 2.);
     let span = f32::from(z(MAX_W + 32.));
@@ -384,6 +429,10 @@ mod tests {
         ] {
             assert!(fr.contains(line), "{line}");
         }
+        let o = others_label(4).unwrap_or_default();
+        let line = format!("Ann et {o} ont réagi avec :x:");
+        assert_eq!(link_range(&line, Some(&o)), Some(7..7 + o.len()));
+        assert_eq!(others_label(0), None);
         assert!(en.contains("reaction.tip_3n: \"{emoji} reacted by {a}, {b}, {c}, and {n} others\""));
     }
 

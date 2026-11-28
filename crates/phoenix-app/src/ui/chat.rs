@@ -43,6 +43,7 @@ pub mod voice_message;
 pub(crate) mod welcome;
 pub mod blocked;
 pub mod burst_tip;
+pub mod reaction_emoji;
 pub mod command_msg;
 pub mod slash;
 pub mod spoiler;

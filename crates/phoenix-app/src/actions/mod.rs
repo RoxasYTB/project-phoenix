@@ -34,6 +34,7 @@ pub enum ActionRequest {
     Remind { channel: Id, msg: Id, due_unix: u64 },
     Reminders,
     Reactors { channel: Id, msg: Id, emoji: Reaction, burst: bool },
+    EmojiSource(u64),
     RemoveReactions { channel: Id, msg: Id, emoji: Option<Reaction> },
     ReportMenu(ReportTarget),
     SubmitReport { menu: Box<ReportMenu>, target: ReportTarget, steps: Vec<ReportStep> },

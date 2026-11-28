@@ -111,6 +111,7 @@ pub(crate) async fn request_with(allowed: bool, rest: RestClient, req: ActionReq
             let us = rest.get_reactions(sf(channel), sf(msg), &emoji(&r), 100, burst).await.map_err(e)?;
             ActionReply::Users(us.iter().map(user).collect())
         }
+        R::EmojiSource(id) => ActionReply::Json(rest.get_emoji_source(id).await.map_err(e)?),
         R::RemoveReactions { channel, msg, emoji: r } => {
             rest.remove_reactions(sf(channel), sf(msg), r.as_ref().map(emoji).as_ref()).await.map_err(e)?;
             ActionReply::Done

@@ -8,6 +8,10 @@ use crate::models::{Channel, ChannelId, GuildId, Message, MessageId, ReactionEmo
 
 pub const REFERENCE_FORWARD: u8 = 1;
 
+pub fn emoji_source_path(emoji: u64) -> String {
+    format!("/emojis/{emoji}/source")
+}
+
 pub fn forward_body(channel: ChannelId, message: MessageId, guild: Option<GuildId>, nonce: u64) -> Value {
     let mut r = json!({ "type": REFERENCE_FORWARD, "channel_id": channel, "message_id": message });
     if let Some(g) = guild {
@@ -82,6 +86,10 @@ impl RestClient {
     pub async fn get_reminders(&self) -> Result<Vec<Reminder>> {
         let v: Value = self.call(Method::GET, "/users/@me/saved-messages", Body::None).await?;
         Ok(parse_reminders(&v))
+    }
+
+    pub async fn get_emoji_source(&self, emoji: u64) -> Result<Value> {
+        self.call(Method::GET, &emoji_source_path(emoji), Body::None).await
     }
 
     pub async fn remove_reactions(&self, channel: ChannelId, message: MessageId, emoji: Option<&ReactionEmoji>) -> Result<()> {

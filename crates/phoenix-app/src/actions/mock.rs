@@ -14,12 +14,24 @@ pub fn report_menu(name: &str) -> ReportMenu {
     serde_json::from_str(&json).unwrap_or_default()
 }
 
+pub fn mock_emoji_source(id: u64) -> serde_json::Value {
+    let emojis: Vec<_> = (0..8u64).map(|i| serde_json::json!({ "id": (id + i).to_string(), "name": format!("phoenix_{i}"), "animated": false, "require_colons": true })).collect();
+    serde_json::json!({
+        "type": "GUILD",
+        "guild": { "id": "1374100000000000001", "name": "Phoenix Lounge", "icon": null, "features": ["DISCOVERABLE"], "approximate_presence_count": 1284, "emojis": emojis }
+    })
+}
+
 pub fn reply(req: ActionRequest, users: Vec<User>) -> Result<ActionReply, BackendError> {
     use ActionRequest as R;
     Ok(match req {
-        R::Reactors { .. } => ActionReply::Users(users.into_iter().take(6).collect()),
+        R::Reactors { emoji, burst, .. } => {
+            let n = (if burst { emoji.burst_count } else { emoji.count }) as usize;
+            ActionReply::Users(users.into_iter().take(n.min(6)).collect())
+        }
         R::ReportMenu(t) => ActionReply::ReportMenu(Box::new(report_menu(t.menu_name()))),
         R::Reminders => ActionReply::Messages(Vec::new()),
+        R::EmojiSource(id) => ActionReply::Json(mock_emoji_source(id)),
         R::CreateThread { channel, .. } | R::CloneChannel { channel, .. } => ActionReply::Channel(channel),
         R::CreateStandaloneThread { channel, .. } => ActionReply::Channel(channel),
         R::Admin(c) | R::AdminMfa(c, _, _) => ActionReply::Json(super::admin::mock_reply(&c)),

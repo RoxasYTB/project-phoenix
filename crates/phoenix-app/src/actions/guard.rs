@@ -74,7 +74,7 @@ pub fn refuse_parity(allowed: bool, req: &ParityRequest) -> Option<phoenix_api::
 fn action_method(req: &ActionRequest) -> Option<Method> {
     match req {
         ActionRequest::Admin(c) | ActionRequest::AdminMfa(c, _, _) => Some(phoenix_api::rest::guild_manage::build(c).method),
-        ActionRequest::Reminders | ActionRequest::ReportMenu(_) | ActionRequest::Reactors { .. } => Some(Method::GET),
+        ActionRequest::Reminders | ActionRequest::ReportMenu(_) | ActionRequest::Reactors { .. } | ActionRequest::EmojiSource(_) => Some(Method::GET),
         _ => None,
     }
 }
