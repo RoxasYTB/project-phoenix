@@ -249,8 +249,10 @@ fn message_preview(app: &PhoenixApp, channel: Id, message: Id) -> Option<gpui::D
                 .child(
                     div()
                         .flex()
-                        .gap(z(16.))
-                        .pl(z(16.))
+                        .gap(z(20.))
+                        .pl(z(20.))
+                        .pr(z(20.))
+                        .py(z(2.))
                         .child(div().flex_none().mt(z(2.)).child(crate::ui::avatar(u, 40.)))
                         .child(
                             div()
@@ -259,7 +261,13 @@ fn message_preview(app: &PhoenixApp, channel: Id, message: Id) -> Option<gpui::D
                                 .flex()
                                 .flex_col()
                                 .child(header)
-                                .child(div().text_size(z(16.)).line_height(z(22.)).text_color(c(tok(idx::TEXT_DEFAULT))).child(content)),
+                                .child(
+                                    div()
+                                        .text_size(z(16.))
+                                        .line_height(z(22.))
+                                        .text_color(c(tok(idx::TEXT_DEFAULT)))
+                                        .child(crate::ui::emoji_text::inline_markdown(app, &content, c(tok(idx::TEXT_DEFAULT)), FontWeight::NORMAL, 16., true)),
+                                ),
                         ),
                 ),
         ),

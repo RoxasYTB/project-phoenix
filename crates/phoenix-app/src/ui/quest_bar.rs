@@ -346,6 +346,18 @@ fn collapsed(q: &Quest, cx: &mut Context<PhoenixApp>) -> AnyElement {
         .px(z(PAD_X))
         .py(z(PAD_Y))
         .bg(tk(idx::BACKGROUND_BASE_LOWER))
+        .when(q.enrolled, |d| {
+            d.rounded_t(z(8.)).overflow_hidden().child(
+                div()
+                    .absolute()
+                    .inset_0()
+                    .rounded_t(z(8.))
+                    .bg(tk(idx::HOME_BACKGROUND))
+                    .border_t(z(2.))
+                    .border_color(tk(idx::BACKGROUND_MOD_SUBTLE))
+                    .child(div().absolute().inset_0().bg(linear_gradient(90., linear_color_stop(gpui::transparent_black(), 0.), linear_color_stop(rgba(0xcdd8ff1a), 1.)))),
+            )
+        })
         .when(q.completed, |d| d.child(completed_glow()))
         .when(!q.enrolled, |d| {
             d.children(q.hero.clone().map(|h| {
