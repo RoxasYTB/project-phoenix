@@ -11,8 +11,6 @@ use crate::{
     theme::{Palette, c, generated::idx, tok, z},
 };
 
-pub const TOKEN_LINK_IN_CARD: bool = true;
-
 pub fn toggle_token(a: &mut PhoenixApp, cx: &mut Context<PhoenixApp>) {
     a.login_with_token = !a.login_with_token;
     a.login_mfa_step = false;
@@ -254,7 +252,7 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
     )
     .mt(z(4.))
     .on_click(cx.listener(|a, _, _, cx| toggle_token(a, cx)));
-    let show_toggle = TOKEN_LINK_IN_CARD || app.login_with_token;
+    let show_toggle = app.login_with_token;
     let form = div()
         .w(z(FORM_W))
         .flex_none()
