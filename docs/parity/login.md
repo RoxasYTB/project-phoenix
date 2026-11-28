@@ -123,5 +123,5 @@ helper `extractCaptchaPropsFromResponse`):
 
 - Artwork: the client `img.artwork__dBQf7` is `object-fit: fill` over the viewport (headless `/login` at 1280×700 and 1600×900), so it stretches instead of covering; Phoenix now uses `ObjectFit::Fill`.
 - Window buttons: `title_bar::login_bar` draws them in the app; the `views` example did not force client decorations, so login renders lacked them. It now does for `login*` scenes.
-- Token link: `login::TOKEN_LINK_IN_CARD` (true). Set to false, the link only shows while the token form is open and Ctrl+Shift+T toggles it on the login screen (same binding as the main screen's group DM shortcut).
+- Token link (user decision 28/11): not in the card, so the card matches the client. Ctrl+Shift+T on the login screen opens the token form (same binding as the main screen's group DM shortcut); « Se connecter avec un e-mail » shows only inside that form to go back.
 - Passkey: the client calls `POST /auth/passwordless/start` → `{challenge, ticket}`, runs `navigator.credentials.get` (desktop: native `discord_webauthn` module, absent from the Linux install, so Chromium WebAuthn), then `POST /auth/conditional/finish {credential, ticket}`. On Linux a native client can only reach USB/NFC security keys over CTAP2 (hidraw); platform passkeys and phone hybrid (BLE caBLE) are not available. Not implemented; the link stays.
