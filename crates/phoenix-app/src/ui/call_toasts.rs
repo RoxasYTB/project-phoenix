@@ -324,6 +324,7 @@ fn toast(app: &PhoenixApp, m: &Message, opacity: f32, cx: &mut Context<PhoenixAp
                 )
                 .child(div().flex_none().ml(z(8.)).size(z(32.)).rounded_full().shadow(shadow).child(crate::ui::avatar(app.users.get(&m.author), 32. * crate::theme::zoom()))),
         )
+        .occlude()
         .on_click(cx.listener(move |a, _, _, cx| {
             crate::ui::call_view::set_chat_open(channel, true);
             a.jump_to_message(channel, id, cx);

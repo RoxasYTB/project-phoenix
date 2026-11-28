@@ -1674,6 +1674,7 @@ pub fn call_volume(user: Id, stream: bool, cx: &App) -> AnyElement {
     let id = |s: &str| gpui::ElementId::Name(format!("{s}-{key}").into());
     div()
         .id(id("callvol"))
+        .occlude()
         .relative()
         .flex_none()
         .size(z(24.))
