@@ -298,17 +298,17 @@ async fn connect(inner: Arc<Inner>, token: Secret, remember: bool) -> Result<Rea
         global_name: ready.user.global_name.clone(),
         avatar: ready.user.avatar.clone(),
     };
-    if let Err(e) = store_op(&inner.store, move |s| {
-        if remember {
-            s.save(&token)?;
-        }
-        s.save_account(uid, &token)
-    })
-    .await
-    {
+    let account_token = token.clone();
+    if remember && let Err(e) = store_op(&inner.store, move |s| s.save(&token)).await {
         tracing_warn(&format!("could not save token to the keyring: {e}"));
     }
-    let _ = tokio::task::spawn_blocking(move || crate::saved_accounts::remember(acct)).await;
+    let store = inner.store.clone();
+    tokio::spawn(async move {
+        if let Err(e) = store_op(&store, move |s| s.save_account(uid, &account_token)).await {
+            tracing_warn(&format!("could not save the account to the keyring: {e}"));
+        }
+        let _ = tokio::task::spawn_blocking(move || crate::saved_accounts::remember(acct)).await;
+    });
 
     qos_store::save(ready.user.id.0, ready.qos_token.as_deref());
     let prefs = Prefs::from_ready(&ready);
