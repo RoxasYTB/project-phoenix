@@ -14,8 +14,17 @@ pub type BoxFuture<T> = Pin<Box<dyn Future<Output = Result<T, BackendError>> + S
 pub struct BackendError(pub String);
 
 const REJECTED: &str = "\u{1}rejected\u{1}";
+const FIELDS: &str = "\u{2}fields\u{2}";
 
 impl BackendError {
+    pub fn fields(login: Option<String>, password: Option<String>) -> Self {
+        Self(format!("{FIELDS}{}\u{1f}{}", login.unwrap_or_default(), password.unwrap_or_default()))
+    }
+    pub fn field_errors(msg: &str) -> Option<(Option<&str>, Option<&str>)> {
+        let rest = msg.strip_prefix(FIELDS)?;
+        let (l, p) = rest.split_once('\u{1f}')?;
+        Some(((!l.is_empty()).then_some(l), (!p.is_empty()).then_some(p)))
+    }
     pub fn rejected(msg: impl std::fmt::Display) -> Self {
         Self(format!("{REJECTED}{msg}"))
     }

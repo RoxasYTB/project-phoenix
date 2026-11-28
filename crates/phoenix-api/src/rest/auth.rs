@@ -2,7 +2,7 @@ use reqwest::Method;
 use serde::Deserialize;
 use serde_json::json;
 
-use super::{Body, RestClient};
+use super::{Body, CaptchaSolution, RestClient};
 use crate::error::Result;
 
 #[derive(Deserialize)]
@@ -60,14 +60,16 @@ impl RestClient {
         Ok(t.token)
     }
 
-    pub async fn remote_auth_login(&self, ticket: &str) -> Result<String> {
+    pub async fn remote_auth_login(&self, ticket: &str, captcha: Option<&CaptchaSolution>) -> Result<String> {
         #[derive(Deserialize)]
         struct E {
             encrypted_token: String,
         }
-        let e: E = self
-            .call(Method::POST, "/users/@me/remote-auth/login", Body::Json(json!({ "ticket": ticket })))
+        let headers = captcha.map(CaptchaSolution::headers).unwrap_or_default();
+        let (_, bytes) = self
+            .raw_with(Method::POST, "/users/@me/remote-auth/login", Body::Json(json!({ "ticket": ticket })), 0, &headers)
             .await?;
+        let e: E = serde_json::from_slice(&bytes)?;
         Ok(e.encrypted_token)
     }
 }
@@ -79,7 +81,7 @@ mod tests {
     use serde_json::Value;
     use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 
-    type Seen = Vec<(String, Value)>;
+    type Seen = Vec<(String, Value, String)>;
 
     async fn serve(responses: Vec<(&'static str, &'static str)>) -> (RestClient, tokio::task::JoinHandle<Seen>) {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -105,7 +107,7 @@ mod tests {
                 let mut body = vec![0; len];
                 socket.read_exact(&mut body).await.unwrap();
                 let line = head.lines().next().unwrap_or_default().to_owned();
-                seen.push((line, serde_json::from_slice(&body).unwrap_or(Value::Null)));
+                seen.push((line, serde_json::from_slice(&body).unwrap_or(Value::Null), head.to_ascii_lowercase()));
                 let reply = format!(
                     "HTTP/1.1 {status}\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{response}",
                     response.len()
@@ -181,6 +183,80 @@ mod tests {
         let captcha = timeout(rest.login_mfa(LoginMfaType::Totp, "tkt", "123456", None)).await.unwrap_err();
         assert!(matches!(captcha, Error::CaptchaRequired { sitekey: Some(s), .. } if s == "site"));
         assert_eq!(server.await.unwrap().len(), 3);
+    }
+
+    #[tokio::test]
+    async fn captcha_challenge_is_parsed_and_the_retry_carries_the_solution() {
+        let (rest, server) = serve(vec![
+            ("200 OK", r#"{"fingerprint":"111.abc","assignments":[]}"#),
+            (
+                "400 Bad Request",
+                r#"{"captcha_key":["captcha-required"],"captcha_sitekey":"b2b02ab5","captcha_service":"hcaptcha","captcha_rqdata":"rqd","captcha_rqtoken":"rqt","captcha_session_id":"sid"}"#,
+            ),
+            ("200 OK", r#"{"user_id":"1","token":"tok"}"#),
+        ])
+        .await;
+        assert_eq!(timeout(rest.ensure_fingerprint()).await.as_deref(), Some("111.abc"));
+        let err = timeout(rest.login_with("a@b.c", "pw", None)).await.unwrap_err();
+        assert_eq!(err.to_string(), "captcha required");
+        let body = err.captcha().unwrap().clone();
+        assert_eq!(body.captcha_rqdata.as_deref(), Some("rqd"));
+        let sol = CaptchaSolution::from_challenge("P1_key".into(), &body);
+        let ok = timeout(rest.login_with("a@b.c", "pw", Some(&sol))).await.unwrap();
+        assert!(matches!(ok, LoginResponse::Token { token, .. } if token == "tok"));
+        let seen = server.await.unwrap();
+        assert!(seen[0].0.starts_with("GET /experiments "));
+        assert_eq!(
+            seen[1].1,
+            json!({"login":"a@b.c","password":"pw","undelete":false,"login_source":null,"gift_code_sku_id":null})
+        );
+        assert!(seen[1].2.contains("x-fingerprint: 111.abc") && !seen[1].2.contains("x-captcha-key"));
+        assert!(seen[2].2.contains("x-captcha-key: p1_key"));
+        assert!(seen[2].2.contains("x-captcha-rqtoken: rqt") && seen[2].2.contains("x-captcha-session-id: sid"));
+    }
+
+    #[tokio::test]
+    async fn invalid_login_keeps_the_field_errors() {
+        let (rest, server) = serve(vec![(
+            "400 Bad Request",
+            r#"{"message":"Invalid Form Body","code":50035,"errors":{"login":{"_errors":[{"code":"INVALID_LOGIN","message":"Login or password is invalid."}]},"password":{"_errors":[{"code":"INVALID_LOGIN","message":"Login or password is invalid."}]}}}"#,
+        )])
+        .await;
+        let err = timeout(rest.login("a@b.c", "pw")).await.unwrap_err();
+        let Error::Api { body, .. } = &err else { panic!() };
+        assert_eq!(body.code, 50035);
+        assert_eq!(body.field_error("login").as_deref(), Some("Login or password is invalid."));
+        assert_eq!(body.field_error("password").as_deref(), Some("Login or password is invalid."));
+        assert_eq!(body.field_error("email"), None);
+        server.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn remote_auth_ticket_retries_once_the_captcha_is_solved() {
+        let (rest, server) = serve(vec![
+            ("400 Bad Request", r#"{"captcha_key":["captcha-required"],"captcha_sitekey":"site","captcha_service":"hcaptcha","captcha_rqtoken":"rqt"}"#),
+            ("200 OK", r#"{"encrypted_token":"enc"}"#),
+        ])
+        .await;
+        let solver = crate::captcha::solver(|body| async move { Some(CaptchaSolution::from_challenge("solved".into(), &body)) });
+        let enc = timeout(crate::remote_auth::login_ticket(&rest, "tkt", Some(&solver))).await.unwrap();
+        assert_eq!(enc, "enc");
+        let seen = server.await.unwrap();
+        assert!(seen[1].0.starts_with("POST /users/@me/remote-auth/login "));
+        assert!(seen[1].2.contains("x-captcha-key: solved") && seen[1].2.contains("x-captcha-rqtoken: rqt"));
+        assert_eq!(seen[1].1, json!({"ticket":"tkt"}));
+    }
+
+    #[tokio::test]
+    async fn remote_auth_without_solver_reports_the_captcha() {
+        let (rest, server) = serve(vec![(
+            "400 Bad Request",
+            r#"{"captcha_key":["captcha-required"],"captcha_sitekey":"site"}"#,
+        )])
+        .await;
+        let err = timeout(crate::remote_auth::login_ticket(&rest, "tkt", None)).await.unwrap_err();
+        assert!(err.captcha().is_some());
+        server.await.unwrap();
     }
 
     #[test]

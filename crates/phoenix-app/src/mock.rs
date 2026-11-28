@@ -641,6 +641,16 @@ impl Backend for MockBackend {
 
     fn login(&self, creds: Credentials) -> BoxFuture<ReadyData> {
         let inner = self.inner.clone();
+        if let Credentials::Password { login, .. } = &creds
+            && login == "invalid@phoenix.demo"
+        {
+            let wait = self.delayed(|| ());
+            return Box::pin(async move {
+                wait.await?;
+                let msg = crate::t!("login.invalid").to_string();
+                Err(BackendError::fields(Some(msg.clone()), Some(msg)))
+            });
+        }
         if let Credentials::Password { login, password } = &creds
             && !password.is_empty()
             && let Some(opts) = mock_mfa(login)

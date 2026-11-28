@@ -17,6 +17,47 @@ pub(super) fn mfa_required(inner: &Inner, ticket: String, login_instance_id: Opt
     Err(err(""))
 }
 
+pub(super) fn open_browser(url: &str) {
+    #[cfg(target_os = "windows")]
+    let r = std::process::Command::new("rundll32").args(["url.dll,FileProtocolHandler", url]).spawn();
+    #[cfg(target_os = "macos")]
+    let r = std::process::Command::new("open").arg(url).spawn();
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    let r = std::process::Command::new("xdg-open").arg(url).spawn();
+    if let Err(e) = r {
+        tracing_warn(&format!("captcha: could not open the browser: {e}"));
+    }
+}
+
+fn captcha_text() -> phoenix_api::captcha::PageText {
+    phoenix_api::captcha::PageText {
+        lang: crate::i18n::locale().split(['-', '_']).next().unwrap_or("en").to_owned(),
+        title: crate::t!("captcha.title").to_string(),
+        subtitle: crate::t!("captcha.subtitle").to_string(),
+        done: crate::t!("captcha.done").to_string(),
+        cancel: crate::t!("common.cancel").to_string(),
+    }
+}
+
+pub(super) fn captcha_solver() -> phoenix_api::captcha::Solver {
+    phoenix_api::captcha::solver(|body| async move { phoenix_api::captcha::solve(&body, &captcha_text(), open_browser).await })
+}
+
+pub(super) async fn password_login(rest: &RestClient, login: &str, password: &str) -> Result<phoenix_api::rest::LoginResponse, ApiError> {
+    let solver = captcha_solver();
+    let mut solution = None;
+    for _ in 0..3 {
+        match rest.login_with(login, password, solution.as_ref()).await {
+            Err(ApiError::CaptchaRequired { body, sitekey }) => match solver((*body).clone()).await {
+                Some(s) => solution = Some(s),
+                None => return Err(ApiError::CaptchaRequired { body, sitekey }),
+            },
+            other => return other,
+        }
+    }
+    rest.login_with(login, password, solution.as_ref()).await
+}
+
 fn mfa_err(e: ApiError) -> BackendError {
     match &e {
         ApiError::CaptchaRequired { .. } | ApiError::RateLimited { .. } => api_err(e),
@@ -61,7 +102,8 @@ impl DiscordBackend {
         self.spawn(move |inner| async move {
             let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
             let rest = RestClient::unauthenticated(inner.props.clone());
-            let task = tokio::spawn(remote_auth::run(rest, tx));
+            rest.ensure_fingerprint().await;
+            let task = tokio::spawn(remote_auth::run(rest, tx, Some(captcha_solver())));
             *inner.remote_auth.lock() = Some(task.abort_handle());
             while let Some(ev) = rx.recv().await {
                 match ev {
@@ -77,7 +119,11 @@ impl DiscordBackend {
                 }
             }
             match task.await {
-                Ok(Err(e)) => Err(err(format!("Couldn't reach Discord's QR login ({}).", short(&e)))),
+                Ok(Err(e)) if e.captcha().is_some() => Err(err(crate::t!("login.captcha_failed").to_string())),
+                Ok(Err(e)) => {
+                    tracing_warn(&format!("remote auth failed: {}", short(&e)));
+                    Err(err(crate::t!("login.qr_error").to_string()))
+                }
                 _ => Err(err("")),
             }
         })
@@ -428,5 +474,28 @@ mod mfa_tests {
         assert!(limited.0.contains("30"));
         let captcha = mfa_err(ApiError::CaptchaRequired { sitekey: None, body: Box::default() });
         assert!(captcha.0.contains("captcha"));
+    }
+
+    #[test]
+    fn invalid_form_body_shows_the_field_messages_not_the_generic_one() {
+        let body: ApiErrorBody = serde_json::from_str(
+            r#"{"message":"Corps de formulaire non valide","code":50035,"errors":{"login":{"_errors":[{"code":"INVALID_LOGIN","message":"Identifiant ou mot de passe invalide."}]},"password":{"_errors":[{"code":"INVALID_LOGIN","message":"Identifiant ou mot de passe invalide."}]}}}"#,
+        )
+        .unwrap();
+        let e = super::super::login_err(ApiError::Api { status: 400, body: Box::new(body), raw: String::new() });
+        let (login, password) = BackendError::field_errors(&e.0).unwrap();
+        assert_eq!(login, Some("Identifiant ou mot de passe invalide."));
+        assert_eq!(password, Some("Identifiant ou mot de passe invalide."));
+        let only_pw: ApiErrorBody = serde_json::from_str(
+            r#"{"message":"Invalid Form Body","code":50035,"errors":{"password":{"_errors":[{"code":"BASE_TYPE_REQUIRED","message":"This field is required"}]}}}"#,
+        )
+        .unwrap();
+        let e = super::super::login_err(ApiError::Api { status: 400, body: Box::new(only_pw), raw: String::new() });
+        assert_eq!(BackendError::field_errors(&e.0), Some((None, Some("This field is required"))));
+        let bare = super::super::login_err(api(400, 50035, "Invalid Form Body"));
+        assert!(BackendError::field_errors(&bare.0).is_none());
+        assert_eq!(bare.0, "Invalid Form Body");
+        let captcha = super::super::login_err(ApiError::CaptchaRequired { sitekey: Some("k".into()), body: Box::default() });
+        assert!(!captcha.0.contains("Some(") && !captcha.0.contains("sitekey"));
     }
 }

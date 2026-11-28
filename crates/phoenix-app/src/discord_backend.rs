@@ -56,20 +56,47 @@ fn err(s: impl Into<String>) -> BackendError {
 
 const SEND_RETRIES: u32 = 3;
 
+fn first_field_error(v: &serde_json::Value) -> Option<String> {
+    let obj = v.as_object()?;
+    if let Some(msg) = obj.get("_errors").and_then(|e| e.as_array()).and_then(|a| a.iter().find_map(|e| e.get("message")?.as_str())) {
+        return Some(msg.to_owned());
+    }
+    obj.values().find_map(first_field_error)
+}
+
 fn api_err(e: ApiError) -> BackendError {
     match &e {
-        ApiError::CaptchaRequired { .. } => {
-            err("Discord wants a captcha for this login, which Phoenix can't show. Scan the QR code with the mobile app or log in with a token instead.")
-        }
-        ApiError::Api { body, .. } if e.is_unauthorized() || body.code == 50035 => {
-            err(if body.message.is_empty() { "Login or password is invalid.".to_owned() } else { body.message.clone() })
+        ApiError::CaptchaRequired { .. } => err(crate::t!("login.captcha_failed").to_string()),
+        ApiError::Api { body, .. } if body.code == 50035 => err(
+            body.errors.as_ref().and_then(first_field_error).filter(|m| !m.is_empty()).unwrap_or_else(|| {
+                if body.message.is_empty() { crate::t!("login.invalid").to_string() } else { body.message.clone() }
+            }),
+        ),
+        ApiError::Api { body, .. } if e.is_unauthorized() => {
+            err(if body.message.is_empty() { crate::t!("login.invalid").to_string() } else { body.message.clone() })
         }
         _ if e.is_unauthorized() => err("Invalid token."),
         ApiError::RateLimited { retry_after, .. } => {
-            err(format!("Rate limited by Discord, retry in {}s.", retry_after.as_secs().max(1)))
+            err(crate::t!("login.rate_limited", secs = retry_after.as_secs().max(1)).to_string())
         }
         _ => err(e.to_string()),
     }
+}
+
+fn login_err(e: ApiError) -> BackendError {
+    if let ApiError::Api { body, .. } = &e
+        && body.code == 50035
+    {
+        let login = body.field_error("login").or_else(|| body.field_error("email"));
+        let password = body.field_error("password");
+        if login.is_some() || password.is_some() {
+            return BackendError::fields(login, password);
+        }
+    }
+    if matches!(e, ApiError::Http(_)) {
+        return err(crate::t!("login.network_error").to_string());
+    }
+    api_err(e)
 }
 
 struct Session {
@@ -541,7 +568,8 @@ impl Backend for DiscordBackend {
                         return Err(err("Enter your email and password."));
                     }
                     let rest = RestClient::unauthenticated(inner.props.clone());
-                    match rest.login(login.trim(), &password).await.map_err(api_err)? {
+                    rest.ensure_fingerprint().await;
+                    match account::password_login(&rest, login.trim(), &password).await.map_err(login_err)? {
                         LoginResponse::Token { token, .. } => connect(inner, Secret::new(token), true).await,
                         LoginResponse::MfaRequired { ticket, totp, sms, backup, webauthn, login_instance_id, .. } => {
                             account::mfa_required(&inner, ticket, login_instance_id, crate::auth::MfaOptions { totp, sms, backup, webauthn })

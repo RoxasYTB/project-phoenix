@@ -286,6 +286,7 @@ fn main() -> anyhow::Result<()> {
             "login-mfa-sms" => "sms@phoenix.demo",
             "login-mfa-key" => "key@phoenix.demo",
             "login-mfa" | "login-mfa-error" => "totp@phoenix.demo",
+            "login-invalid" => "invalid@phoenix.demo",
             _ => "mfa@phoenix.demo",
         };
         if scene != "login" {

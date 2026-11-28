@@ -136,7 +136,7 @@ pub fn handle(keys: &Keys, msg: &Value) -> Result<Step> {
     })
 }
 
-pub async fn run(rest: RestClient, tx: mpsc::UnboundedSender<RemoteAuthEvent>) -> Result<()> {
+pub async fn run(rest: RestClient, tx: mpsc::UnboundedSender<RemoteAuthEvent>, solver: Option<crate::captcha::Solver>) -> Result<()> {
     let keys = tokio::task::spawn_blocking(Keys::generate)
         .await
         .map_err(|e| Error::Protocol(e.to_string()))??;
@@ -191,7 +191,7 @@ pub async fn run(rest: RestClient, tx: mpsc::UnboundedSender<RemoteAuthEvent>) -
                         }
                     }
                     Step::Ticket(t) => {
-                        let enc = rest.remote_auth_login(&t).await?;
+                        let enc = login_ticket(&rest, &t, solver.as_ref()).await?;
                         let token = String::from_utf8(keys.decrypt(&enc)?)
                             .map_err(|_| Error::Protocol("token is not utf-8".into()))?;
                         let _ = tx.send(RemoteAuthEvent::Token(token));
@@ -251,4 +251,21 @@ mod tests {
         let p = proof_of(b"x");
         assert!(!p.contains('=') && !p.contains('+') && !p.contains('/'));
     }
+}
+
+pub async fn login_ticket(rest: &RestClient, ticket: &str, solver: Option<&crate::captcha::Solver>) -> Result<String> {
+    let mut solution = None;
+    for _ in 0..3 {
+        match rest.remote_auth_login(ticket, solution.as_ref()).await {
+            Err(Error::CaptchaRequired { body, sitekey }) => {
+                let Some(solve) = solver else { return Err(Error::CaptchaRequired { body, sitekey }) };
+                match solve((*body).clone()).await {
+                    Some(s) => solution = Some(s),
+                    None => return Err(Error::CaptchaRequired { body, sitekey }),
+                }
+            }
+            other => return other,
+        }
+    }
+    rest.remote_auth_login(ticket, solution.as_ref()).await
 }

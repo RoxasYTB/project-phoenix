@@ -1,4 +1,5 @@
 pub mod build_info;
+pub mod captcha;
 pub mod cache;
 pub mod error;
 pub mod gateway;

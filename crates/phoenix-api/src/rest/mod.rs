@@ -209,6 +209,37 @@ struct Inner {
     timezone: Option<String>,
     notes: parking_lot::Mutex<std::collections::HashMap<u64, Arc<tokio::sync::OnceCell<String>>>>,
     proto_writer: settings::ProtoWriter,
+    fingerprint: parking_lot::RwLock<Option<String>>,
+}
+
+#[derive(Clone, Default)]
+pub struct CaptchaSolution {
+    pub key: String,
+    pub rqtoken: Option<String>,
+    pub session_id: Option<String>,
+}
+
+impl std::fmt::Debug for CaptchaSolution {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("CaptchaSolution(<redacted>)")
+    }
+}
+
+impl CaptchaSolution {
+    pub fn from_challenge(key: String, body: &ApiErrorBody) -> Self {
+        Self { key, rqtoken: body.captcha_rqtoken.clone(), session_id: body.captcha_session_id.clone() }
+    }
+
+    pub fn headers(&self) -> Vec<(&'static str, String)> {
+        let mut h = vec![("x-captcha-key", self.key.clone())];
+        if let Some(t) = &self.rqtoken {
+            h.push(("x-captcha-rqtoken", t.clone()));
+        }
+        if let Some(s) = &self.session_id {
+            h.push(("x-captcha-session-id", s.clone()));
+        }
+        h
+    }
 }
 
 #[derive(Clone)]
@@ -248,6 +279,7 @@ impl RestClient {
                 timezone: crate::props::os_timezone(),
                 notes: Default::default(),
                 proto_writer: Default::default(),
+                fingerprint: Default::default(),
             }),
         }
     }
@@ -294,6 +326,11 @@ impl RestClient {
         {
             h.insert("x-discord-timezone", v);
         }
+        if let Some(fp) = self.inner.fingerprint.read().as_deref()
+            && let Ok(v) = HeaderValue::from_str(fp)
+        {
+            h.insert("x-fingerprint", v);
+        }
         h.insert("x-debug-options", HeaderValue::from_static("bugReporterEnabled"));
         h
     }
@@ -303,10 +340,10 @@ impl RestClient {
     }
 
     async fn raw_failed(&self, method: Method, path: &str, body: Body, failed: u32) -> Result<(StatusCode, Vec<u8>)> {
-        self.raw_with(method, path, body, failed, None).await
+        self.raw_with(method, path, body, failed, &[]).await
     }
 
-    async fn raw_with(&self, method: Method, path: &str, body: Body, failed: u32, extra: Option<(&'static str, String)>) -> Result<(StatusCode, Vec<u8>)> {
+    async fn raw_with(&self, method: Method, path: &str, body: Body, failed: u32, extra: &[(&'static str, String)]) -> Result<(StatusCode, Vec<u8>)> {
         let sent = match &body {
             Body::Json(v) => Some(v),
             Body::Multipart { payload, .. } => Some(payload),
@@ -336,7 +373,7 @@ impl RestClient {
             if retried > 0 {
                 req = req.header("x-failed-requests", retried.to_string());
             }
-            if let Some((name, value)) = &extra {
+            for (name, value) in extra {
                 req = req.header(*name, value.as_str());
             }
             req = match &body {
@@ -455,7 +492,7 @@ impl RestClient {
 
     pub async fn request_json_mfa(&self, method: Method, path: &str, body: Option<Value>, mfa_token: &str) -> Result<Value> {
         let body = body.map(Body::Json).unwrap_or(Body::None);
-        let (_, bytes) = self.raw_with(method, path, body, 0, Some(("x-discord-mfa-authorization", mfa_token.to_owned()))).await?;
+        let (_, bytes) = self.raw_with(method, path, body, 0, &[("x-discord-mfa-authorization", mfa_token.to_owned())]).await?;
         if bytes.is_empty() {
             return Ok(Value::Null);
         }
@@ -628,20 +665,45 @@ impl RestClient {
     }
 
     pub async fn login(&self, login: &str, password: &str) -> Result<LoginResponse> {
-        let raw: RawLogin = self
-            .call(
-                Method::POST,
-                "/auth/login",
-                Body::Json(json!({
-                    "login": login,
-                    "password": password,
-                    "undelete": false,
-                    "login_source": null,
-                    "gift_code_sku_id": null,
-                })),
-            )
-            .await?;
-        parse_login(raw)
+        self.login_with(login, password, None).await
+    }
+
+    pub async fn login_with(&self, login: &str, password: &str, captcha: Option<&CaptchaSolution>) -> Result<LoginResponse> {
+        let body = Body::Json(json!({
+            "login": login,
+            "password": password,
+            "undelete": false,
+            "login_source": null,
+            "gift_code_sku_id": null,
+        }));
+        let headers = captcha.map(CaptchaSolution::headers).unwrap_or_default();
+        let (_, bytes) = self.raw_with(Method::POST, "/auth/login", body, 0, &headers).await?;
+        parse_login(serde_json::from_slice(&bytes)?)
+    }
+
+    pub fn fingerprint(&self) -> Option<String> {
+        self.inner.fingerprint.read().clone()
+    }
+
+    pub fn set_fingerprint(&self, fp: Option<String>) {
+        *self.inner.fingerprint.write() = fp.filter(|f| !f.is_empty());
+    }
+
+    pub async fn ensure_fingerprint(&self) -> Option<String> {
+        if self.inner.token.is_some() {
+            return None;
+        }
+        if let Some(fp) = self.fingerprint() {
+            return Some(fp);
+        }
+        #[derive(Deserialize)]
+        struct E {
+            #[serde(default)]
+            fingerprint: Option<String>,
+        }
+        let e: E = self.call(Method::GET, "/experiments", Body::None).await.ok()?;
+        self.set_fingerprint(e.fingerprint);
+        self.fingerprint()
     }
 }
 

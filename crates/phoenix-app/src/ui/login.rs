@@ -7,17 +7,18 @@ use gpui_component::input::{Input, InputState};
 use crate::{
     app::PhoenixApp,
     auth::QrState,
-    theme::{Palette, c},
+    backend::BackendError,
+    theme::{Palette, c, generated::idx, tok},
 };
 
-fn label(text: SharedString, error: Option<&SharedString>) -> impl IntoElement {
+fn label(text: SharedString, error: Option<&str>) -> impl IntoElement {
     div()
         .mb(px(8.))
         .flex()
         .gap(px(4.))
         .text_size(px(12.))
         .font_weight(FontWeight::BOLD)
-        .text_color(c(if error.is_some() { 0xFA777C } else { Palette::INTERACTIVE }))
+        .text_color(c(if error.is_some() { tok(idx::TEXT_FEEDBACK_CRITICAL) } else { Palette::INTERACTIVE }))
         .child(text)
         .map(|d| match error {
             Some(e) => d.child(
@@ -30,12 +31,14 @@ fn label(text: SharedString, error: Option<&SharedString>) -> impl IntoElement {
         })
 }
 
-fn field(state: &Entity<InputState>) -> impl IntoElement {
+fn field(state: &Entity<InputState>, error: bool) -> impl IntoElement {
     div()
         .h(px(40.))
         .px(px(10.))
-        .rounded(px(3.))
-        .bg(c(Palette::BG_TERTIARY))
+        .rounded(px(8.))
+        .border_1()
+        .border_color(c(tok(if error { idx::BORDER_FEEDBACK_CRITICAL } else { idx::INPUT_BORDER_DEFAULT })))
+        .bg(c(tok(if error { idx::INPUT_BACKGROUND_ERROR_DEFAULT } else { idx::INPUT_BACKGROUND_DEFAULT })))
         .flex()
         .items_center()
         .text_size(px(16.))
@@ -55,7 +58,11 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
     if app.login_mfa_step && !app.login_with_token {
         return backdrop().child(super::login_mfa::render(app, window, cx)).into_any_element();
     }
-    let err = app.login_error.as_ref();
+    let err = app.login_error.as_ref().map(|e| e.as_ref());
+    let (err_login, err_password) = match err.and_then(BackendError::field_errors) {
+        Some(fields) => fields,
+        None => (err, err),
+    };
     let form = div()
         .flex_1()
         .flex()
@@ -85,7 +92,7 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
         .child(div().h(px(20.)))
         .map(|d| {
             if app.login_with_token {
-                d.child(label(crate::t!("login.token"), err)).child(field(&app.login_token)).child(
+                d.child(label(crate::t!("login.token"), err)).child(field(&app.login_token, err.is_some())).child(
                     div()
                         .mt(px(8.))
                         .text_size(px(12.))
@@ -93,11 +100,11 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
                         .child(crate::t!("login.token_note")),
                 )
             } else {
-                d.child(label(crate::t!("login.email"), err))
-                    .child(field(&app.login_email))
+                d.child(label(crate::t!("login.email"), err_login))
+                    .child(field(&app.login_email, err_login.is_some()))
                     .child(div().h(px(20.)))
-                    .child(label(crate::t!("login.password"), err))
-                    .child(field(&app.login_password))
+                    .child(label(crate::t!("login.password"), err_password))
+                    .child(field(&app.login_password, err_password.is_some()))
                     .child(
                         div()
                             .mt(px(4.))
@@ -114,7 +121,7 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
                 .id("login-btn")
                 .mt(px(20.))
                 .h(px(44.))
-                .rounded(px(3.))
+                .rounded(px(8.))
                 .bg(c(Palette::BLURPLE))
                 .hover(|s| s.bg(c(0x4752C4)))
                 .cursor_pointer()
@@ -220,14 +227,14 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
             div()
                 .w(px(784.))
                 .p(px(32.))
-                .rounded(px(5.))
-                .bg(c(Palette::BG_PRIMARY))
+                .rounded(px(8.))
+                .bg(c(tok(idx::MODAL_BACKGROUND)))
                 .shadow_lg()
                 .flex()
                 .gap(px(64.))
                 .items_center()
                 .child(form)
-                .child(div().w(px(1.)).h(px(300.)).bg(c(Palette::BG_PRIMARY)))
+                .child(div().w(px(1.)).h(px(300.)).bg(c(tok(idx::MODAL_BACKGROUND))))
                 .child(qr),
         )
         .into_any_element()

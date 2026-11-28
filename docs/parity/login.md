@@ -59,3 +59,33 @@ everything is checked against a local HTTP server (phoenix-api tests) and the Mo
 - Demo renders: `views out.png dark login-mfa|login-mfa-select|login-mfa-backup|login-mfa-sms|login-mfa-error|...`
   (accounts `totp@phoenix.demo`, `mfa@phoenix.demo`, `sms@phoenix.demo`, `key@phoenix.demo`; code `123456`, backup
   `abcd1234`).
+
+## Password login errors, captcha and QR (28/11)
+
+Measured in the cached `web.55063002a61599e3.js` (`AuthenticationActionCreators.login`, `interceptResponse`, captcha
+helper `extractCaptchaPropsFromResponse`):
+
+- `POST /auth/login` body is `{login, password, undelete, login_source, gift_code_sku_id}` with `oldFormErrors: true`.
+  Phoenix already sent exactly this. The « Corps de formulaire non valide » the user saw was the server's localized
+  top-level `message` of a 50035 (`Invalid Form Body`). The real reason sits in `errors.login._errors[0].message` and
+  `errors.password._errors[0].message` (`INVALID_LOGIN`, « Identifiant ou mot de passe invalide. »), which the client
+  shows next to each field. ✅ Phoenix now reads those per field (`ApiErrorBody::field_error`, `login_err`), red
+  label + `--border-feedback-critical` border (`.inputError_rN1Ls3`), and only falls back to the message when there is
+  no field error.
+- Logged-out requests carry `X-Fingerprint` from `GET /experiments` (`fingerprint` field). ✅ `ensure_fingerprint`
+  before password and QR login.
+- Captcha: any `400` with `captcha_key` is answered by the client with the hCaptcha modal
+  (`captcha_service`, `captcha_sitekey`, `captcha_session_id`, `captcha_rqdata`, `captcha_rqtoken`,
+  `should_serve_invisible`), then the same request is replayed with `X-Captcha-Key`, `X-Captcha-Rqtoken`,
+  `X-Captcha-Session-Id`. ✅ Phoenix serves a one-off page on `127.0.0.1:<random>/<uuid>` with the hCaptcha widget
+  (rqdata via `hcaptcha.setData`), opens it in the system browser, takes the token back and replays the request (up to
+  3 times) for `/auth/login` and `/users/@me/remote-auth/login` (QR). hCaptcha `checksiteconfig` accepts host
+  `127.0.0.1` for Discord's sitekey (`localhost` is refused, so the page uses the IP). Not verified end to end: Discord
+  may still reject a token solved on another host; the user tests it.
+- No raw `Debug` on screen any more: captcha, rate limit, network and QR failures use `login.*` strings.
+- Card: `.authBox_rN1Ls3` `--modal-background`, radius 8 (`--radius-sm`), padding 32, `.authBoxExpanded` 784 px.
+  ❌ The login route's own chunk (form layout, background art) is not in the cache (the user is logged in), so the
+  rest of the page keeps its earlier layout.
+- Tests: `rest::auth::tests` (fingerprint, captcha replay headers, 50035 field errors, QR ticket retry),
+  `captcha::tests` (escaping, local page round trip), `account::mfa_tests::invalid_form_body_*`.
+  Demo: `views out.png dark login-invalid`.

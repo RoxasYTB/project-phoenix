@@ -12,6 +12,23 @@ pub struct ApiErrorBody {
     pub captcha_key: Option<Vec<String>>,
     #[serde(default)]
     pub captcha_sitekey: Option<String>,
+    #[serde(default)]
+    pub captcha_service: Option<String>,
+    #[serde(default)]
+    pub captcha_rqdata: Option<String>,
+    #[serde(default)]
+    pub captcha_rqtoken: Option<String>,
+    #[serde(default)]
+    pub captcha_session_id: Option<String>,
+    #[serde(default)]
+    pub should_serve_invisible: bool,
+}
+
+impl ApiErrorBody {
+    pub fn field_error(&self, field: &str) -> Option<String> {
+        let errs = self.errors.as_ref()?.get(field)?.get("_errors")?.as_array()?;
+        errs.iter().find_map(|e| e.get("message")?.as_str()).filter(|m| !m.is_empty()).map(str::to_owned)
+    }
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -20,7 +37,7 @@ pub enum Error {
     Api { status: u16, body: Box<ApiErrorBody>, raw: String },
     #[error("rate limited for {retry_after:?} (global: {global})")]
     RateLimited { retry_after: Duration, global: bool },
-    #[error("captcha required (sitekey {sitekey:?})")]
+    #[error("captcha required")]
     CaptchaRequired { sitekey: Option<String>, body: Box<ApiErrorBody> },
     #[error("transport: {0}")]
     Http(#[from] reqwest::Error),
@@ -43,6 +60,13 @@ pub enum Error {
 impl Error {
     pub fn is_write_blocked(&self) -> bool {
         matches!(self, Error::WriteBlocked { .. })
+    }
+
+    pub fn captcha(&self) -> Option<&ApiErrorBody> {
+        match self {
+            Error::CaptchaRequired { body, .. } => Some(body),
+            _ => None,
+        }
     }
 
     pub fn is_unauthorized(&self) -> bool {
