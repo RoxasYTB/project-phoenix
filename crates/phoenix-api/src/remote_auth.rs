@@ -205,6 +205,23 @@ pub async fn run(rest: RestClient, tx: mpsc::UnboundedSender<RemoteAuthEvent>, s
     }
 }
 
+pub async fn login_ticket(rest: &RestClient, ticket: &str, solver: Option<&crate::captcha::Solver>) -> Result<String> {
+    let mut solution = None;
+    for _ in 0..3 {
+        match rest.remote_auth_login(ticket, solution.as_ref()).await {
+            Err(Error::CaptchaRequired { body, sitekey }) => {
+                let Some(solve) = solver else { return Err(Error::CaptchaRequired { body, sitekey }) };
+                match solve((*body).clone()).await {
+                    Some(s) => solution = Some(s),
+                    None => return Err(Error::CaptchaRequired { body, sitekey }),
+                }
+            }
+            other => return other,
+        }
+    }
+    rest.remote_auth_login(ticket, solution.as_ref()).await
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -251,21 +268,4 @@ mod tests {
         let p = proof_of(b"x");
         assert!(!p.contains('=') && !p.contains('+') && !p.contains('/'));
     }
-}
-
-pub async fn login_ticket(rest: &RestClient, ticket: &str, solver: Option<&crate::captcha::Solver>) -> Result<String> {
-    let mut solution = None;
-    for _ in 0..3 {
-        match rest.remote_auth_login(ticket, solution.as_ref()).await {
-            Err(Error::CaptchaRequired { body, sitekey }) => {
-                let Some(solve) = solver else { return Err(Error::CaptchaRequired { body, sitekey }) };
-                match solve((*body).clone()).await {
-                    Some(s) => solution = Some(s),
-                    None => return Err(Error::CaptchaRequired { body, sitekey }),
-                }
-            }
-            other => return other,
-        }
-    }
-    rest.remote_auth_login(ticket, solution.as_ref()).await
 }
