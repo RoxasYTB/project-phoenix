@@ -142,5 +142,9 @@ No real-data compare ran for this pass: the user's Discord was on a guild channe
 | Progress ring | `453384` (`88dccc0432747edc.js`): size 42, `style:"small"` stroke 3, padding stroke+2, track `--background-mod-strong` drawn twice, arc `--status-positive` from −90° (`.progress_loRtN1`) | canvas ring, same sizes and colours, reward art clipped round inside | ✅ |
 | Title | `q()` in `8479adc51144af78.js`: `ij5E/5` completed, `lVZaXD` (floored percent) when enrolled with progress, `mOrpXG` play quests, `7e5k7L` otherwise; `body-sm/semibold`, `text-strong` | `quests.bar_*` | ✅ |
 | Subtitle | `b()` collapsed: `APddvF` (claim by) completed, `o+e9yh` video, `mOrpXG` with progress, `S6UUc5` without; `body-xs/normal`, `text-subtle` | same keys | ✅; ➖ live in-game progress text (`YT`, needs the heartbeat) |
-| Expanded bar (hover / click), confetti, ⋯ menu | `tF` / `tR`, `.borders_VCaaii`, `.confetti_VCaaii`, `eU` | click opens Quest Home | ❌ not built |
+| Collapsed background | `tF` `.postEnrollmentBackground_ZzrVHV` (`--home-background`, `linear-gradient(90deg,#00000000,#CDD8FF1A)` from `272111`, 2 px `--background-mod-subtle` top) | same layers | ✅ |
+| Expanded bar | hover expands after the client's 75 ms (Phoenix: at once), leave collapses; `.contentExpanded_A1jYpL` absolute, grows upward, `contentExpandedInset` 12 px; enrolled: `eU` header (`pX+fmn` footnote, opacity .7, ⋯ 24 px), divider (`--interactive-background-hover`, mb 12), ring row with the task description; promoted: hero + `.legibilityGradient`, `EQa7os` title, description, Accept (`l7E81v`, `quest_enroll` guarded, content 10) | `quest_bar::overlay` | ✅; ➖ spring animation, game-launch instructions (`e_`), video preview |
+| Completed glow | `489811` `.background_VCaaii` (green 5→10 % gradient), `.borders_VCaaii` 2 px top/left | gradient + 25 % border | ✅; ❌ confetti Lottie |
+| ⋯ menu | `eQ.C` with `showShareLink` | the Quest Home tile menu (`extra_menus::Target::QuestMore`) | ✅ |
+| Promoted quests | `GET /quests/decision?placement=1`, `creative_type` 1 = quest | `Backend::quest_decision`, read only | ✅ |
 
