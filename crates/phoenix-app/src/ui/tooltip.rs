@@ -147,6 +147,10 @@ fn badge_card(b: BadgeTip) -> gpui::Div {
         )
 }
 
+pub fn caret_up() -> gpui::Div {
+    caret(false)
+}
+
 pub fn caret_down() -> gpui::Div {
     caret(true)
 }

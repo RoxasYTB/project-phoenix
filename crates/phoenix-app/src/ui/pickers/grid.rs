@@ -758,7 +758,7 @@ fn start_burst_education(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) {
     .detach();
 }
 
-fn education_tip() -> AnyElement {
+fn education_tip(above: bool) -> AnyElement {
     let body = div()
         .flex()
         .items_center()
@@ -772,25 +772,24 @@ fn education_tip() -> AnyElement {
                 .child(div().font_weight(FontWeight::MEDIUM).text_color(tk(idx::TEXT_DEFAULT)).child(crate::t!("picker.burst_education_title")))
                 .child(div().font_weight(FontWeight::NORMAL).text_color(tk(idx::TEXT_SUBTLE)).child(crate::t!("picker.burst_education_body"))),
         );
-    let frame = div()
-        .w(px(240.))
-        .flex()
-        .flex_col()
-        .items_center()
-        .child(crate::ui::tooltip::rich_card(body))
-        .child(crate::ui::tooltip::caret_down());
+    let frame = div().w(px(240.)).flex().flex_col().items_center();
+    let (frame, anchor, y) = if above {
+        (frame.child(crate::ui::tooltip::rich_card(body)).child(crate::ui::tooltip::caret_down()), gpui::Anchor::BottomLeft, -6.)
+    } else {
+        (frame.child(crate::ui::tooltip::caret_up()).child(crate::ui::tooltip::rich_card(body)), gpui::Anchor::TopLeft, 38.)
+    };
     gpui::deferred(
         gpui::anchored()
             .position_mode(gpui::AnchoredPositionMode::Local)
-            .anchor(gpui::Anchor::BottomLeft)
-            .position(gpui::point(px(16. - 120.), px(-6.)))
+            .anchor(anchor)
+            .position(gpui::point(px(16. - 120.), px(y)))
             .child(frame),
     )
     .with_priority(2)
     .into_any_element()
 }
 
-pub fn burst_toggle(app: &PhoenixApp, on: bool, window: &mut Window, cx: &mut Context<PhoenixApp>) -> AnyElement {
+pub fn burst_toggle(app: &PhoenixApp, on: bool, room_above: bool, window: &mut Window, cx: &mut Context<PhoenixApp>) -> AnyElement {
     start_burst_education(app, cx);
     let premium = app.backend.has_premium();
     let now = std::time::Instant::now();
@@ -832,7 +831,7 @@ pub fn burst_toggle(app: &PhoenixApp, on: bool, window: &mut Window, cx: &mut Co
                 .text_color(fg)
                 .with_transformation(gpui::Transformation::rotate(gpui::radians(angle))),
         );
-    div().relative().flex_none().child(button).when(edu, |d| d.child(education_tip())).into_any_element()
+    div().relative().flex_none().child(button).when(edu, |d| d.child(education_tip(room_above))).into_any_element()
 }
 
 pub fn tone_button(cx: &mut Context<PhoenixApp>) -> AnyElement {

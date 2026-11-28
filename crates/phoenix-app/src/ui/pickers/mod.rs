@@ -672,7 +672,7 @@ fn render_picker(app: &PhoenixApp, window: &mut Window, cx: &mut Context<Phoenix
         .child(search_box(&input));
     if tab == Tab::Emoji {
         if matches!(target, EmojiTarget::Reaction { .. }) {
-            header = header.child(grid::burst_toggle(app, burst, window, cx));
+            header = header.child(grid::burst_toggle(app, burst, top > 120., window, cx));
         }
         header = header.child(grid::tone_button(cx));
         if has_tabs {
