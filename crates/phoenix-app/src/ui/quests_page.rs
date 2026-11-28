@@ -50,6 +50,9 @@ pub struct Quest {
     pub tasks: Vec<String>,
     pub video_thumb: Option<SharedString>,
     pub video_portrait: bool,
+    pub dismissed_content: u64,
+    pub completed_at: Option<DateTime<Utc>>,
+    pub rewards_expire: Option<DateTime<Utc>>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -481,6 +484,9 @@ pub fn parse(v: &Value, now: DateTime<Utc>) -> Vec<Quest> {
             video_portrait: tasks
                 .get("WATCH_VIDEO")
                 .is_some_and(|t| t["assets"]["video"]["height"].as_u64().unwrap_or(0) > t["assets"]["video"]["width"].as_u64().unwrap_or(u64::MAX)),
+            dismissed_content: us["dismissed_quest_content"].as_u64().unwrap_or(0),
+            completed_at: date(&us["completed_at"]),
+            rewards_expire: date(&cfg["rewards_config"]["rewards_expire_at"]),
         });
     }
     out.retain(|q| !q.claimed);
@@ -607,6 +613,10 @@ pub fn first_video_quest() -> Option<Quest> {
 
 pub fn first_quest() -> Option<Quest> {
     QUESTS.with(|q| q.borrow().as_ref().and_then(|l| l.first().cloned()))
+}
+
+pub fn all_quests() -> Option<Vec<Quest>> {
+    QUESTS.with(|q| q.borrow().clone())
 }
 
 pub fn quest(id: u64) -> Option<Quest> {
@@ -1341,6 +1351,9 @@ mod tests {
             tasks: Vec::new(),
             video_thumb: None,
             video_portrait: false,
+            dismissed_content: 0,
+            completed_at: None,
+            rewards_expire: None,
         };
         f(&mut x);
         x
