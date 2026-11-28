@@ -12,8 +12,10 @@ use crate::model::{Id, Message, Reaction};
 use crate::theme::{c, generated::idx, tok, z};
 
 pub const SHOW_AFTER: Duration = Duration::from_millis(750);
+pub const SHOW_AFTER_NORMAL: Duration = Duration::from_millis(500);
 pub const HIDE_AFTER: Duration = Duration::from_millis(200);
 const MAX_W: f32 = 288.;
+const EMOJI: f32 = 48.;
 const GAP: f32 = 8.;
 const ROOM: f32 = 120.;
 
@@ -61,27 +63,32 @@ pub fn dismiss(pill: u64) {
     crate::ui::states::set_hover(tip_key(pill), false);
 }
 
-pub fn text(names: &[String], total: u32, emoji: &str) -> Option<SharedString> {
+pub fn show_after(burst: bool) -> Duration {
+    if burst { SHOW_AFTER } else { SHOW_AFTER_NORMAL }
+}
+
+pub fn text(names: &[String], total: u32, emoji: &str, burst: bool) -> Option<SharedString> {
     let n = total.saturating_sub(names.len() as u32);
     let ns = n.to_string();
-    let plural = |base: &str| if n == 1 { format!("{base}_one") } else { base.to_owned() };
+    let prefix = if burst { "burst" } else { "reaction" };
+    let key = |base: &str| match (n, base.ends_with('n')) {
+        (1, true) => format!("{prefix}.{base}_one"),
+        _ => format!("{prefix}.{base}"),
+    };
     let s = match names {
         [] => return None,
-        [a] if n == 0 => crate::i18n::t("burst.tip_1", &[("a", a.as_str()), ("emoji", emoji)]),
-        [a] => crate::i18n::t(&plural("burst.tip_1n"), &[("a", a.as_str()), ("n", ns.as_str()), ("emoji", emoji)]),
-        [a, b] if n == 0 => crate::i18n::t("burst.tip_2", &[("a", a.as_str()), ("b", b.as_str()), ("emoji", emoji)]),
-        [a, b] => crate::i18n::t(&plural("burst.tip_2n"), &[("a", a.as_str()), ("b", b.as_str()), ("n", ns.as_str()), ("emoji", emoji)]),
-        [a, b, cc, ..] if n == 0 => crate::i18n::t("burst.tip_3", &[("a", a.as_str()), ("b", b.as_str()), ("c", cc.as_str()), ("emoji", emoji)]),
-        [a, b, cc, ..] => crate::i18n::t(
-            &plural("burst.tip_3n"),
-            &[("a", a.as_str()), ("b", b.as_str()), ("c", cc.as_str()), ("n", ns.as_str()), ("emoji", emoji)],
-        ),
+        [a] if n == 0 => crate::i18n::t(&key("tip_1"), &[("a", a.as_str()), ("emoji", emoji)]),
+        [a] => crate::i18n::t(&key("tip_1n"), &[("a", a.as_str()), ("n", ns.as_str()), ("emoji", emoji)]),
+        [a, b] if n == 0 => crate::i18n::t(&key("tip_2"), &[("a", a.as_str()), ("b", b.as_str()), ("emoji", emoji)]),
+        [a, b] => crate::i18n::t(&key("tip_2n"), &[("a", a.as_str()), ("b", b.as_str()), ("n", ns.as_str()), ("emoji", emoji)]),
+        [a, b, cc, ..] if n == 0 => crate::i18n::t(&key("tip_3"), &[("a", a.as_str()), ("b", b.as_str()), ("c", cc.as_str()), ("emoji", emoji)]),
+        [a, b, cc, ..] => crate::i18n::t(&key("tip_3n"), &[("a", a.as_str()), ("b", b.as_str()), ("c", cc.as_str()), ("n", ns.as_str()), ("emoji", emoji)]),
     };
     Some(s)
 }
 
-pub fn visible(pill: Option<(bool, std::time::Instant)>, tip: Option<(bool, std::time::Instant)>, shown: bool) -> bool {
-    let ready = pill.is_some_and(|(on, at)| on && at.elapsed() >= SHOW_AFTER);
+pub fn visible(pill: Option<(bool, std::time::Instant)>, tip: Option<(bool, std::time::Instant)>, shown: bool, delay: Duration) -> bool {
+    let ready = pill.is_some_and(|(on, at)| on && at.elapsed() >= delay);
     if ready {
         return true;
     }
@@ -112,7 +119,7 @@ pub fn on_pill_hover(entity: &Entity<PhoenixApp>, channel: Id, id: Id, r: &React
     let entity = entity.downgrade();
     let reaction = r.clone();
     cx.spawn(async move |cx| {
-        cx.background_executor().timer(SHOW_AFTER).await;
+        cx.background_executor().timer(show_after(burst)).await;
         cx.update(|cx| {
             if crate::ui::states::state(pill) == hover && let Some(entity) = entity.upgrade() {
                 entity.update(cx, |a, cx| {
@@ -127,8 +134,8 @@ pub fn on_pill_hover(entity: &Entity<PhoenixApp>, channel: Id, id: Id, r: &React
     .detach();
 }
 
-pub fn load_names(a: &mut PhoenixApp, channel: Id, id: Id, r: &Reaction, cx: &mut gpui::Context<PhoenixApp>) {
-    request_names(a, channel, id, r, true, cx);
+pub fn load_names(a: &mut PhoenixApp, channel: Id, id: Id, r: &Reaction, burst: bool, cx: &mut gpui::Context<PhoenixApp>) {
+    request_names(a, channel, id, r, burst, cx);
 }
 
 fn request_names(a: &mut PhoenixApp, channel: Id, id: Id, r: &Reaction, burst: bool, cx: &mut gpui::Context<PhoenixApp>) {
@@ -162,7 +169,7 @@ fn request_names(a: &mut PhoenixApp, channel: Id, id: Id, r: &Reaction, burst: b
             let active = if current_hover.is_some_and(|(on, _)| on) {
                 current_hover == hover
             } else {
-                visible(current_hover, crate::ui::states::state(tip_key(pill)), SHOWN.get() == Some(pill))
+                visible(current_hover, crate::ui::states::state(tip_key(pill)), SHOWN.get() == Some(pill), show_after(burst))
             };
             if a.selected_channel != route || !active {
                 cache.remove(index);
@@ -222,36 +229,25 @@ pub fn layer(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message, r: &R
     let pill = pill_key(msg.channel, msg.id, r, burst);
     let tip = tip_key(pill);
     let shown = SHOWN.get() == Some(pill);
-    if !visible(crate::ui::states::state(pill), crate::ui::states::state(tip), shown) {
+    if !visible(crate::ui::states::state(pill), crate::ui::states::state(tip), shown, show_after(burst)) {
         if shown {
             SHOWN.set(None);
         }
         return None;
     }
     let b = BOUNDS.with_borrow(|bounds| bounds.get(&pill).copied())?;
-    SHOWN.set(Some(pill));
     let label = crate::ui::modals::reactions::tab_label(r);
-    let (line, failed) = CACHE.with_borrow(|cache| match cache.iter().find(|entry| entry.key.0 == pill).map(|entry| &entry.state) {
-        Some(Preview::Ready(users)) => {
-            let names = names(app, msg, users);
-            let line = if names.is_empty() {
-                crate::t!("reaction_preview.empty")
-            } else if burst {
-                text(&names, r.burst_count, &label).unwrap_or_default()
-            } else {
-                let remaining = r.count.saturating_sub(names.len() as u32);
-                let names = names.join(", ");
-                if remaining == 0 {
-                    names.into()
-                } else {
-                    crate::i18n::t("reaction_preview.more", &[("names", &names), ("count", &remaining.to_string())])
-                }
-            };
-            (line, false)
-        }
-        Some(Preview::Failed) => (crate::t!("reaction_preview.failed"), true),
-        _ => (crate::t!("common.loading"), false),
+    let line = CACHE.with_borrow(|cache| match cache.iter().find(|entry| entry.key.0 == pill).map(|entry| &entry.state) {
+        Some(Preview::Ready(users)) => text(&names(app, msg, users), if burst { r.burst_count } else { r.count }, &label, burst),
+        _ => None,
     });
+    let Some(line) = line else {
+        if shown {
+            SHOWN.set(None);
+        }
+        return None;
+    };
+    SHOWN.set(Some(pill));
     let premium = app.backend.has_premium();
     let (ch, id) = (msg.channel, msg.id);
     let e_open = entity.clone();
@@ -259,27 +255,23 @@ pub fn layer(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message, r: &R
     let e_unlock = entity.clone();
     let rc = r.clone();
     let list = &msg.reactions;
-    let selected = burst.then(|| {
-        crate::ui::modals::reactions::entries(list)
-            .iter()
-            .position(|en| en.burst && list.get(en.index).is_some_and(|x| x.emoji == r.emoji && x.emoji_id == r.emoji_id))
-            .unwrap_or(0)
-    });
-    let e_retry = entity.clone();
-    let retry_emoji = r.clone();
+    let selected = crate::ui::modals::reactions::entries(list)
+        .iter()
+        .position(|en| en.burst == burst && list.get(en.index).is_some_and(|x| x.emoji == r.emoji && x.emoji_id == r.emoji_id))
+        .unwrap_or(0);
     let inner = div()
         .id(("reaction-tip-inner", pill))
-        .when(burst, |d| d.cursor_pointer())
+        .cursor_pointer()
         .flex()
         .items_center()
-        .child(div().size(z(32.)).flex_none().child(crate::media::emoji::emoji_element(&r.emoji, 32.)))
+        .child(div().size(z(EMOJI)).flex_none().child(crate::media::emoji::emoji_element(&r.emoji, EMOJI)))
         .child(body_text(format!("\u{200E}{line}")).ml(z(12.)).flex_1().min_w_0())
-        .when_some(selected, |d, selected| d.on_click(move |_, window, cx| {
+        .on_click(move |_, window, cx| {
             cx.stop_propagation();
             dismiss(pill);
             window.refresh();
             e_open.update(cx, |a, cx| a.open_reactions(ch, id, selected, cx));
-        }));
+        });
     let prompt = div().mt(z(12.)).pt(z(8.)).border_t_1().border_color(c(tok(idx::BORDER_SUBTLE))).w_full().flex().items_center();
     let footer = burst.then(|| if r.me_burst {
         prompt.when(premium, |d| d.child(nitro_icon())).child(body_text(crate::t!("burst.tip_sent")).ml(z(12.))).into_any_element()
@@ -317,9 +309,8 @@ pub fn layer(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message, r: &R
     let card = div()
         .id(("reaction-tip", pill))
         .max_w(z(MAX_W))
-        .p(z(if burst { 16. } else { 10. }))
-        .rounded(z(if burst { crate::theme::generated::global::RADIUS_XS } else { 10. }))
-        .when(!burst, |d| d.border_1().border_color(c(tok(idx::BORDER_SUBTLE))))
+        .p(z(16.))
+        .rounded(z(crate::theme::generated::global::RADIUS_XS))
         .overflow_hidden()
         .bg(c(tok(idx::BACKGROUND_SURFACE_HIGH)))
         .shadow(crate::ui::inbox::popout_shadow())
@@ -336,17 +327,6 @@ pub fn layer(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message, r: &R
         })
         .child(inner)
         .child(crate::ui::states::hover_guard(tip))
-        .when(failed, |d| d.child(
-            crate::ui::controls::button(("reaction-tip-retry", pill), crate::t!("common.retry"), crate::ui::controls::BtnKind::Secondary)
-                .mt(z(8.))
-                .on_click(move |_, _, cx| {
-                    cx.stop_propagation();
-                    e_retry.update(cx, |a, cx| {
-                        request_names(a, ch, id, &retry_emoji, burst, cx);
-                        cx.notify();
-                    });
-                }),
-        ))
         .children(footer);
     let top = f32::from(b.origin.y);
     let mid = f32::from(b.origin.x + b.size.width / 2.);
@@ -375,25 +355,49 @@ mod tests {
     fn text_follows_the_client_cases() {
         let n = |v: &[&str]| v.iter().map(|s| s.to_string()).collect::<Vec<_>>();
         let t = crate::i18n::t;
-        assert_eq!(text(&[], 3, ":fire:"), None);
-        assert_eq!(text(&n(&["Ann"]), 1, ":fire:"), Some(t("burst.tip_1", &[("a", "Ann"), ("emoji", ":fire:")])));
-        assert_eq!(text(&n(&["Ann"]), 2, ":fire:"), Some(t("burst.tip_1n_one", &[("a", "Ann"), ("n", "1"), ("emoji", ":fire:")])));
+        assert_eq!(text(&[], 3, ":fire:", true), None);
+        assert_eq!(text(&n(&["Ann"]), 1, ":fire:", true), Some(t("burst.tip_1", &[("a", "Ann"), ("emoji", ":fire:")])));
+        assert_eq!(text(&n(&["Ann"]), 2, ":fire:", true), Some(t("burst.tip_1n_one", &[("a", "Ann"), ("n", "1"), ("emoji", ":fire:")])));
         assert_eq!(
-            text(&n(&["Ann", "Bob", "Cy"]), 7, ":fire:"),
+            text(&n(&["Ann", "Bob", "Cy"]), 7, ":fire:", true),
             Some(t("burst.tip_3n", &[("a", "Ann"), ("b", "Bob"), ("c", "Cy"), ("n", "4"), ("emoji", ":fire:")]))
         );
-        assert_eq!(text(&n(&["Ann", "Bob"]), 2, ":x:"), Some(t("burst.tip_2", &[("a", "Ann"), ("b", "Bob"), ("emoji", ":x:")])));
+        assert_eq!(text(&n(&["Ann", "Bob"]), 2, ":x:", true), Some(t("burst.tip_2", &[("a", "Ann"), ("b", "Bob"), ("emoji", ":x:")])));
+        assert_eq!(text(&n(&["Ann"]), 1, ":sweat_smile:", false), Some(t("reaction.tip_1", &[("a", "Ann"), ("emoji", ":sweat_smile:")])));
+        assert_eq!(text(&n(&["Ann", "Bob"]), 3, ":x:", false), Some(t("reaction.tip_2n_one", &[("a", "Ann"), ("b", "Bob"), ("n", "1"), ("emoji", ":x:")])));
+        assert_eq!(
+            text(&n(&["Ann", "Bob", "Cy"]), 3, ":x:", false),
+            Some(t("reaction.tip_3", &[("a", "Ann"), ("b", "Bob"), ("c", "Cy"), ("emoji", ":x:")]))
+        );
+    }
+
+    #[test]
+    fn french_strings_match_the_client() {
+        let fr = include_str!("../../../locales/fr.yml");
+        let en = include_str!("../../../locales/en.yml");
+        for line in [
+            "reaction.tip_1: \"{a} a réagi avec {emoji}\"",
+            "reaction.tip_1n_one: \"{a} et {n}\u{a0}autre ont réagi avec {emoji}\"",
+            "reaction.tip_2n: \"{a}, {b} et {n}\u{a0}autres ont réagi avec {emoji}\"",
+            "reaction.tip_3n: \"{a}, {b}, {c} et {n}\u{a0}autres ont réagi avec {emoji}\"",
+            "burst.tip_1n: \"{a} et {n}\u{a0}autres ont utilisé la super réaction {emoji}\"",
+        ] {
+            assert!(fr.contains(line), "{line}");
+        }
+        assert!(en.contains("reaction.tip_3n: \"{emoji} reacted by {a}, {b}, {c}, and {n} others\""));
     }
 
     #[test]
     fn tooltip_waits_then_lingers() {
         let now = Instant::now();
         let ago = |ms: u64| now - Duration::from_millis(ms);
-        assert!(!visible(Some((true, ago(100))), None, false));
-        assert!(visible(Some((true, ago(800))), None, false));
-        assert!(visible(Some((false, ago(50))), None, true));
-        assert!(!visible(Some((false, ago(400))), None, true));
-        assert!(visible(Some((false, ago(400))), Some((true, ago(300))), true));
-        assert!(!visible(Some((false, ago(50))), None, false));
+        assert!(!visible(Some((true, ago(100))), None, false, SHOW_AFTER));
+        assert!(visible(Some((true, ago(800))), None, false, SHOW_AFTER));
+        assert!(visible(Some((false, ago(50))), None, true, SHOW_AFTER));
+        assert!(!visible(Some((false, ago(400))), None, true, SHOW_AFTER));
+        assert!(visible(Some((false, ago(400))), Some((true, ago(300))), true, SHOW_AFTER));
+        assert!(!visible(Some((false, ago(50))), None, false, SHOW_AFTER));
+        assert!(visible(Some((true, ago(550))), None, false, show_after(false)));
+        assert!(!visible(Some((true, ago(550))), None, false, show_after(true)));
     }
 }

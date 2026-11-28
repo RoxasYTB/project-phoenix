@@ -1799,6 +1799,22 @@ fn main() -> anyhow::Result<()> {
                         }
                     }
                 }
+                "reactiontip" => {
+                    let pick = app.selected_channel.and_then(|c| {
+                        let msgs = &app.messages.get(&c)?.msgs;
+                        let m = msgs.iter().rev().find(|m| m.reactions.iter().any(|r| r.count > 0))?;
+                        let r = m.reactions.iter().find(|r| r.count > 0)?;
+                        Some((c, m.id, r.clone()))
+                    });
+                    if let Some((c, m, r)) = pick {
+                        println!("reaction tooltip on {m:?} {}", r.emoji);
+                        let key = phoenix_app::ui::chat::burst_tip::pill_key(c, m, &r, false);
+                        phoenix_app::ui::states::set_hover(key, true);
+                        phoenix_app::ui::chat::burst_tip::load_names(app, c, m, &r, false, cx);
+                        phoenix_app::ui::chat::burst_tip::refresh_after(cx, phoenix_app::ui::chat::burst_tip::SHOW_AFTER_NORMAL);
+                        cx.notify();
+                    }
+                }
                 "bursttip" | "burstupsell" => {
                     let pick = app.selected_channel.and_then(|c| {
                         let msgs = &app.messages.get(&c)?.msgs;
@@ -1812,7 +1828,7 @@ fn main() -> anyhow::Result<()> {
                         println!("burst tooltip on {m:?} {}", r.emoji);
                         let key = phoenix_app::ui::chat::burst_tip::pill_key(c, m, &r, true);
                         phoenix_app::ui::states::set_hover(key, true);
-                        phoenix_app::ui::chat::burst_tip::load_names(app, c, m, &r, cx);
+                        phoenix_app::ui::chat::burst_tip::load_names(app, c, m, &r, true, cx);
                         phoenix_app::ui::chat::burst_tip::refresh_after(cx, phoenix_app::ui::chat::burst_tip::SHOW_AFTER);
                         cx.notify();
                     }
