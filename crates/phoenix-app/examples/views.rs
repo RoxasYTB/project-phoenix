@@ -107,12 +107,8 @@ fn main() -> anyhow::Result<()> {
                     "pin-confirm" | "unpin-confirm" => {
                         let g = app.guilds.first().map(|g| g.id);
                         app.select_guild(g, cx);
-                        if let Some(ch) = app.selected_channel {
-                            let last = app.messages.get(&ch).and_then(|x| x.msgs.iter().rev().find(|m| !m.content.is_empty()).cloned());
-                            if let Some(mut m) = last {
-                                m.pinned = scene == "unpin-confirm";
-                                app.request_pin_message(ch, m, false, cx);
-                            }
+                        if scene == "unpin-confirm" {
+                            app.toggle_pins(cx);
                         }
                     }
                     "members" => {
@@ -264,6 +260,31 @@ fn main() -> anyhow::Result<()> {
             });
         })?;
         pump(&mut cx, 4);
+        if scene == "pin-confirm" || scene == "unpin-confirm" {
+            let unpin = scene == "unpin-confirm";
+            for _ in 0..40 {
+                let ready = cx.update_window(win.into(), |_, _, cx| {
+                    let app = v.read(cx);
+                    app.selected_channel.and_then(|ch| app.messages.get(&ch)).is_some_and(|x| x.msgs.iter().any(|m| !m.content.is_empty()))
+                })?;
+                if ready {
+                    break;
+                }
+                pump(&mut cx, 2);
+            }
+            cx.update_window(win.into(), |_, _, cx| {
+                v.update(cx, |app, cx| {
+                    if let Some(ch) = app.selected_channel {
+                        let last = app.messages.get(&ch).and_then(|x| x.msgs.iter().rev().find(|m| !m.content.is_empty()).cloned());
+                        if let Some(mut m) = last {
+                            m.pinned = unpin;
+                            app.request_pin_message(ch, m, false, cx);
+                        }
+                    }
+                });
+            })?;
+            pump(&mut cx, 4);
+        }
         if scene == "post" {
             cx.update_window(win.into(), |_, window, cx| {
                 v.update(cx, |app, cx| {
