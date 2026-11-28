@@ -3,8 +3,8 @@ use std::{
     time::Duration,
 };
 
-use futures::{AsyncReadExt, future::join_all};
-use gpui::http_client::HttpClient;
+use futures::{AsyncReadExt, future::{BoxFuture, join_all}};
+use gpui::http_client::{AsyncBody, HttpClient, Request, Response, Url, http::HeaderValue};
 
 use crate::{discord_backend::convert::AVATAR_SIZE, media::cache::CachingHttpClient};
 
@@ -64,8 +64,53 @@ impl DemoPerson {
     }
 }
 
+pub const SERVER_TAG: &str = "PHX";
+pub const SERVER_TAG_BADGE: &str = "68bd043e2369a73dd25501784a086e5a";
+const SERVER_TAG_BADGE_GUILD: u64 = 1369382919948210248;
+
+pub fn server_badge_url(size: u32) -> String {
+    format!("{}/clan-badges/{SERVER_TAG_BADGE_GUILD}/{SERVER_TAG_BADGE}.png?size={size}", phoenix_api::models::CDN_BASE)
+}
+
+pub fn alias(url: &str) -> Option<String> {
+    let rest = url.strip_prefix(phoenix_api::models::CDN_BASE)?.strip_prefix('/')?;
+    let (kind, rest) = rest.split_once('/')?;
+    if kind != "clan-badges" && kind != "guild-tag-badges" {
+        return None;
+    }
+    let (guild, file) = rest.split_once('/')?;
+    let query = file.strip_prefix(SERVER_TAG_BADGE)?.strip_prefix(".png")?;
+    (guild != SERVER_TAG_BADGE_GUILD.to_string()).then(|| {
+        let size = query.strip_prefix("?size=").and_then(|s| s.parse().ok()).unwrap_or(32);
+        server_badge_url(size)
+    })
+}
+
+struct AliasClient(Arc<dyn HttpClient>);
+
+impl HttpClient for AliasClient {
+    fn user_agent(&self) -> Option<&HeaderValue> {
+        self.0.user_agent()
+    }
+
+    fn proxy(&self) -> Option<&Url> {
+        self.0.proxy()
+    }
+
+    fn send(&self, mut req: Request<AsyncBody>) -> BoxFuture<'static, anyhow::Result<Response<AsyncBody>>> {
+        if let Some(uri) = alias(&req.uri().to_string()).and_then(|u| u.parse().ok()) {
+            *req.uri_mut() = uri;
+        }
+        self.0.send(req)
+    }
+}
+
 pub fn urls() -> Vec<String> {
-    PEOPLE.iter().flat_map(|p| std::iter::once(p.avatar_url()).chain(p.badge_url())).collect()
+    PEOPLE
+        .iter()
+        .flat_map(|p| std::iter::once(p.avatar_url()).chain(p.badge_url()))
+        .chain([16, 32].map(server_badge_url))
+        .collect()
 }
 
 fn runtime() -> &'static tokio::runtime::Runtime {
@@ -83,7 +128,7 @@ fn runtime() -> &'static tokio::runtime::Runtime {
 pub fn client() -> Arc<dyn HttpClient> {
     let ua = phoenix_api::ClientProperties::default();
     let inner = Arc::new(crate::discord_backend::http::CdnHttpClient::new(runtime().handle().clone(), ua.user_agent()));
-    Arc::new(CachingHttpClient::new(inner))
+    Arc::new(AliasClient(Arc::new(CachingHttpClient::new(inner))))
 }
 
 pub fn prefetch(http: &Arc<dyn HttpClient>) -> usize {
