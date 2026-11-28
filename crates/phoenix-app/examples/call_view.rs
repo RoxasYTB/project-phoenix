@@ -267,6 +267,26 @@ fn main() -> anyhow::Result<()> {
                 shot(&mut cx)?;
             }
         }
+        let (x, y) = pip::corner_position(pip::corner(), vw, vh, (pip::PIP_W, pip::PIP_H));
+        let grip = (x + pip::PIP_W - 3., y + pip::PIP_H - 3.);
+        let grow = if matches!(pip::corner(), Corner::TopRight | Corner::BottomRight) { -97. } else { 97. };
+        send(&mut cx, gpui::PlatformInput::MouseDown(gpui::MouseDownEvent { button: gpui::MouseButton::Left, position: at(grip.0, grip.1), modifiers: gpui::Modifiers::default(), click_count: 1, first_mouse: false }))?;
+        cx.update_window(win.into(), |_, window, _| window.refresh())?;
+        cx.run_until_parked();
+        let mut last = grip;
+        for i in 1..=19 {
+            clock += 16;
+            pip::freeze_clock(Some(clock));
+            last = (grip.0 + grow * i as f32 / 19., grip.1);
+            send(&mut cx, gpui::PlatformInput::MouseMove(gpui::MouseMoveEvent { position: at(last.0, last.1), pressed_button: Some(gpui::MouseButton::Left), modifiers: gpui::Modifiers::default() }))?;
+            shot(&mut cx)?;
+        }
+        send(&mut cx, gpui::PlatformInput::MouseUp(gpui::MouseUpEvent { button: gpui::MouseButton::Left, position: at(last.0, last.1), modifiers: gpui::Modifiers::default(), click_count: 1 }))?;
+        for _ in 0..20 {
+            clock += 16;
+            pip::freeze_clock(Some(clock));
+            shot(&mut cx)?;
+        }
         pip::freeze_clock(None);
         println!("wrote {frame} frames to {dir}");
         return Ok(());

@@ -17,6 +17,7 @@ pub const MIN_W: f32 = 200.;
 pub const MAX_W: f32 = 960.;
 const RESIZE_SLACK: f32 = 20.;
 const WIDTH_STEP: f32 = 40.;
+const WIDTH_MS: f32 = 200.;
 pub const EDGE_TOP: f32 = 80.;
 pub const EDGE_BOTTOM: f32 = 132.;
 pub const EDGE_LEFT: f32 = 80.;
@@ -123,6 +124,7 @@ struct Motion {
     last_move_ms: i64,
     velocity: (f32, f32),
     resizing: Option<(f32, f32, f32)>,
+    width_anim: Option<(f32, i64)>,
 }
 
 impl Motion {
@@ -138,6 +140,7 @@ impl Motion {
             last_move_ms: 0,
             velocity: (0., 0.),
             resizing: None,
+            width_anim: None,
         }
     }
 
@@ -246,6 +249,11 @@ pub fn width() -> f32 {
 
 pub fn height_for(width: f32) -> f32 {
     width * 9. / 16.
+}
+
+pub fn width_at(from: f32, to: f32, elapsed_ms: i64) -> Option<f32> {
+    let t = elapsed_ms as f32 / WIDTH_MS;
+    (t < 1.).then(|| from + (to - from) * crate::ui::states::cubic_bezier(0.42, 0., 0.58, 1.)(t.max(0.)))
 }
 
 pub fn snap_width(width: f32, max_x: f32) -> f32 {
@@ -406,7 +414,20 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
     if motion.resizing.is_none() && width() > fit {
         set_width(fit);
     }
-    let card_w = motion.resizing.map_or_else(width, |r| r.2);
+    let card_w = match (motion.resizing, motion.width_anim) {
+        (Some(r), _) => r.2,
+        (None, Some((from, start))) => match width_at(from, width(), now_ms() - start) {
+            Some(w) => {
+                window.request_animation_frame();
+                w
+            }
+            None => {
+                motion.width_anim = None;
+                width()
+            }
+        },
+        (None, None) => width(),
+    };
     let size = (card_w, height_for(card_w));
     if motion.animating() {
         let now = now_ms();
@@ -745,6 +766,7 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
                         let mut st = MOTION.with(Cell::get);
                         if let Some((_, _, w)) = st.resizing.take() {
                             set_width(snap_width(w, vw));
+                            st.width_anim = Some((w, now_ms()));
                             MOTION.with(|m| m.set(st));
                             cx.notify();
                             return;
@@ -779,7 +801,7 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
 mod tests {
     use super::{
         Corner, EDGE_BOTTOM, EDGE_LEFT, EDGE_RIGHT, EDGE_TOP, FOLLOW, PIP_H, PIP_W, SETTLE, Spring, corner_position, height_for, parse_saved,
-        release_corner, saved_json, snap_width, translate,
+        release_corner, saved_json, snap_width, translate, width_at,
     };
 
     fn run(origami: (f64, f64), samples: &[i64]) -> Vec<f64> {
@@ -877,6 +899,16 @@ mod tests {
     fn drag_is_clamped_to_the_window() {
         assert_eq!(translate(-50., -10., 1280., 800., SIZE), (0., 0.));
         assert_eq!(translate(2000., 2000., 1280., 800., SIZE), (1280. - PIP_W, 800. - PIP_H));
+    }
+
+    #[test]
+    fn released_width_eases_in_out_over_200_ms() {
+        assert_eq!(width_at(337., 320., 0), Some(337.));
+        let mid = width_at(300., 340., 100).unwrap();
+        assert!((mid - 320.).abs() < 1e-3);
+        let early = width_at(300., 340., 40).unwrap();
+        assert!(early > 300. && early < 304.);
+        assert_eq!(width_at(300., 340., 200), None);
     }
 
     #[test]
