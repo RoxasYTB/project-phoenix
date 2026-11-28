@@ -320,6 +320,8 @@ fn main() -> anyhow::Result<()> {
             })?;
             pump(&mut cx, 40);
         }
+        cx.update_window(win.into(), |_, window, _| window.activate_window())?;
+        pump(&mut cx, 2);
         for (i, on) in seq.chars().filter(|c| *c == '0' || *c == '1').enumerate() {
             cx.update_window(win.into(), |_, _, cx| {
                 v.update(cx, |app, cx| {
