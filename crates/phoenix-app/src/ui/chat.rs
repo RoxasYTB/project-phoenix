@@ -196,7 +196,7 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
 const THREAD_SIDEBAR_MIN_W: f32 = 450.;
 const THREAD_SIDEBAR_RESERVED_W: f32 = 315.;
 
-fn thread_sidebar_layout(in_voice_panel: bool, chat_width: gpui::Pixels) -> (gpui::Pixels, bool) {
+pub(crate) fn thread_sidebar_layout(in_voice_panel: bool, chat_width: gpui::Pixels) -> (gpui::Pixels, bool) {
     if in_voice_panel {
         return (z(480.), false);
     }
@@ -2806,12 +2806,12 @@ mod indent_tests {
     }
 }#[test]
     fn thread_sidebar_floats_when_the_chat_area_is_narrow() {
-        let at = |w: f32| super::thread_sidebar_layout(false, gpui::px(w));
+        let at = |w: f32| crate::ui::chat::thread_sidebar_layout(false, gpui::px(w));
         assert_eq!(at(628.), (gpui::px(450.), true));
         assert_eq!(at(765.), (gpui::px(450.), true));
         assert_eq!(at(788.), (gpui::px(450.), false));
         assert_eq!(at(968.), (gpui::px(450.), false));
-        assert_eq!(super::thread_sidebar_layout(true, gpui::px(300.)), (gpui::px(480.), false));
+        assert_eq!(crate::ui::chat::thread_sidebar_layout(true, gpui::px(300.)), (gpui::px(480.), false));
     }
 
     
