@@ -49,7 +49,11 @@ fn main() -> anyhow::Result<()> {
         cx.new(|cx| Root::new(v, window, cx))
     })?;
     if let Some(scale) = std::env::var("PHX_SCALE").ok().and_then(|v| v.parse::<f32>().ok()).filter(|s| *s > 0.) {
-        cx.update_window(win.into(), |_, window, _| window.set_scale_factor(scale))?;
+        cx.update_window(win.into(), |_, window, cx| {
+            window.set_scale_factor(scale);
+            window.resize(size(px(w), px(h)));
+            window.bounds_changed(cx);
+        })?;
     }
     let pump = |cx: &mut HeadlessAppContext, n: usize| {
         for _ in 0..n {
@@ -127,12 +131,6 @@ fn main() -> anyhow::Result<()> {
                     "gif" => pickers::open(app, pickers::Tab::Gif, pickers::EmojiTarget::Composer, window, cx),
                     "sticker" => pickers::open(app, pickers::Tab::Sticker, pickers::EmojiTarget::Composer, window, cx),
                     "friends" => app.select_guild(None, cx),
-                    "friends-menu" => {
-                        app.select_guild(None, cx);
-                        if let Some(u) = app.users.keys().copied().find(|u| *u != app.me.id) {
-                            phoenix_app::ui::user_menu::open(u, None, gpui::point(gpui::px(700.), gpui::px(160.)), window);
-                        }
-                    }
                     "friends-all" | "friends-pending" | "friends-add" => {
                         app.select_guild(None, cx);
                         app.nav.friends_tab = match scene.as_str() {
@@ -260,6 +258,12 @@ fn main() -> anyhow::Result<()> {
                         app.select_guild(g, cx);
                         if let Some(id) = app.selected_channel {
                             phoenix_app::ui::nav_menus::open(phoenix_app::ui::nav_menus::Target::Channel(id), gpui::point(px(200.), px(120.)), window);
+                        }
+                    }
+                    "friends-menu" => {
+                        app.select_guild(None, cx);
+                        if let Some(u) = app.nav.relationships.iter().find(|r| r.kind == phoenix_app::ui::home::data::RelationshipKind::Friend).map(|r| r.user) {
+                            phoenix_app::ui::user_menu::open(u, None, gpui::point(gpui::px(700.), gpui::px(160.)), window);
                         }
                     }
                     "member-menu" => {
