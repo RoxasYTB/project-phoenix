@@ -35,7 +35,7 @@ pub fn parse_obus(data: &[u8]) -> Result<Vec<Obu<'_>>> {
         } else {
             data.len() - o
         };
-        let payload = data.get(o..o + len).ok_or(Error::Malformed("obu size"))?;
+        let payload = o.checked_add(len).and_then(|end| data.get(o..end)).ok_or(Error::Malformed("obu size"))?;
         o += len;
         let mut header = hdr.to_vec();
         header[0] &= !0x02;
@@ -198,7 +198,7 @@ impl Depacketizer for Av1Depacketizer {
                 o += n;
                 l as usize
             };
-            elements.push(p.get(o..o + len).ok_or(Error::Malformed("av1 element"))?);
+            elements.push(o.checked_add(len).and_then(|end| p.get(o..end)).ok_or(Error::Malformed("av1 element"))?);
             o += len;
         }
         if !z && !self.partial.is_empty() {
@@ -232,6 +232,26 @@ mod tests {
         leb128::write(payload.len() as u64, &mut v);
         v.extend_from_slice(payload);
         v
+    }
+
+    fn huge_leb128() -> Vec<u8> {
+        let mut v = vec![0xff; 9];
+        v.push(0x01);
+        v
+    }
+
+    #[test]
+    fn huge_obu_size_is_malformed() {
+        let mut frame = vec![(6 << 3) | 0x02];
+        frame.extend_from_slice(&huge_leb128());
+        assert!(parse_obus(&frame).is_err());
+    }
+
+    #[test]
+    fn huge_element_length_is_malformed() {
+        let mut packet = vec![0x00];
+        packet.extend_from_slice(&huge_leb128());
+        assert!(Av1Depacketizer::default().push(&packet, true).is_err());
     }
 
     fn rt(frame: &[u8], mtu: usize) -> (Vec<Vec<u8>>, Vec<u8>) {
