@@ -8,7 +8,6 @@ use chrono::{Datelike, NaiveDate};
 use phoenix_api::rest::search::{FilterKey, PendingFilter, complete_filter, parse_search_with, pending_filter};
 
 use crate::ui::search_query::{self as sq, Answer, AnswerLead};
-use crate::ui::tooltip::Tipped as _;
 
 use crate::{
     search_highlight::Highlighter,
@@ -22,8 +21,8 @@ use crate::{
 pub const PAGE: u32 = 25;
 const WIDTH: f32 = 420.;
 
-pub(super) fn results_width(window: &Window) -> gpui::Pixels {
-    px((f32::from(chat_width(window)) * 0.4).min(WIDTH))
+pub(super) fn results_width() -> gpui::Pixels {
+    px(WIDTH)
 }
 
 pub(super) fn chat_width(window: &Window) -> gpui::Pixels {
@@ -842,14 +841,6 @@ fn results_panel(
     } else {
         crate::t!("search.results", n = group_digits(total))
     };
-    let width = results_width(window);
-    let result_button = |id, glyph, label| {
-        if width < z(350.) {
-            icon_secondary(id, glyph).tip(label)
-        } else {
-            sm_secondary(id, glyph, label)
-        }
-    };
     let header = div()
         .flex_none()
         .h(z(48.))
@@ -865,10 +856,10 @@ fn results_panel(
                 .flex_none()
                 .flex()
                 .gap(z(8.))
-                .child(result_button("search-results-filters", "inbox/filter", crate::t!("search.filters")).on_click(cx.listener(|a, _, w, cx| {
+                .child(sm_secondary("search-results-filters", "inbox/filter", crate::t!("search.filters")).on_click(cx.listener(|a, _, w, cx| {
                     crate::ui::search_filters::open(a, w, cx);
                 })))
-                .child(result_button("search-results-sort", "sort", crate::t!("search.sort")).on_mouse_down(
+                .child(sm_secondary("search-results-sort", "sort", crate::t!("search.sort")).on_mouse_down(
                     gpui::MouseButton::Left,
                     cx.listener(|_, _, _, cx| {
                         cx.stop_propagation();
@@ -924,7 +915,7 @@ fn results_panel(
         .top(z(layout::TITLE_BAR_H + layout::HEADER_H))
         .right_0()
         .bottom_0()
-        .w(width)
+        .w(results_width())
         .bg(tk(idx::BACKGROUND_BASE_LOWEST))
         .border_l_1()
         .border_color(tk(idx::APP_FRAME_BORDER))

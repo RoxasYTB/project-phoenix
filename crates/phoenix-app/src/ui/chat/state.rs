@@ -768,6 +768,9 @@ impl PhoenixApp {
 
     pub fn open_thread(&mut self, thread: ThreadRef, window: &mut Window, cx: &mut Context<Self>) {
         self.chat.create_thread = None;
+        if crate::ui::search::results_shown(cx) {
+            crate::ui::search::close(self, window, cx);
+        }
         let id = thread.id;
         let input = cx.new(|cx| InputState::new(window, cx));
         let sub = cx.subscribe_in(&input, window, |this, _, ev: &InputEvent, window, cx| {

@@ -113,3 +113,15 @@ Unit tests: `ui::title_bar::tests` cover each threshold on both sides and at the
 
 "Programmer un sondage" (`rlf0tb`) in the poll modal: done from the lazy modal chunk fetched from the
 assets CDN (see the poll creation row in chat.md).
+
+## Thread sidebar and search in narrow windows (2026-11-28)
+
+Source: the client's JS from the local cache, read only (no CDP action).
+
+| Area | Client | Phoenix | State |
+|---|---|---|---|
+| Search vs thread | `ChannelSectionStore.getSection` (`web.b63d846b329d6470.js`) returns `SEARCH` while a search is shown, before `SIDEBAR_CHAT`; `renderThreadSidebar` (`9b3cd218fe829ac6.js`) only renders for `SIDEBAR_CHAT`. The thread stays in `sidebars[channelId]` and comes back when the search is cleared (`SEARCH_MESSAGES_CLEAR`); the member list is hidden the same way | `ui/chat.rs`: no thread panel while `search::results_shown`, the thread state is kept, Escape closes the search and the thread is back | ✅ (was squeezing chat and thread to a few px at 940) |
+| Opening a thread during a search | `SIDEBAR_VIEW_CHANNEL` sets the search flag to false | `open_thread` closes the shown results | ✅ |
+| Search results width | `.searchResultsWrap_QHVbp3{flex:0 0 auto;width:418px;border-inline-start:1px}` | fixed 420, no longer shrunk with the window | ✅ |
+| Thread sidebar width | `ChannelChatResizableSidebar` (`1c44b4290d7ddc85.js`): `minWidth` 450, width `clamp(saved ?? 450, 450, maxWidth)`, `maxWidth = width − 240 − 450 + 375` with `width` the channel area (`456412` resize HOC), so `width − 315` | 450 (no resize handle yet) | ✅ |
+| Floating thread | `maxWidth <= minWidth` (`743898`) → `floating_FrbQJp`: absolute at the right edge over the chat, `box-shadow:0 8px 40px var(--opacity-black-52)`, no spacer, so the chat keeps its full width; this happens when the channel area is ≤ 765 px (a 940 px window at 100 % with a 240 px channel list) | `thread_sidebar_layout`: same threshold, panel absolute over the chat with the same shadow | ✅ |
