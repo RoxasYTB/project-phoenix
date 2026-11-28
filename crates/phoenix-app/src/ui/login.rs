@@ -58,7 +58,7 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
     if app.login_mfa_step && !app.login_with_token {
         return backdrop().child(super::login_mfa::render(app, window, cx)).into_any_element();
     }
-    let err = app.login_error.as_ref().map(|e| e.as_ref());
+    let err: Option<&str> = app.login_error.as_ref().map(AsRef::<str>::as_ref);
     let (err_login, err_password) = match err.and_then(BackendError::field_errors) {
         Some(fields) => fields,
         None => (err, err),
