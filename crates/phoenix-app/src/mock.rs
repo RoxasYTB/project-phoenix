@@ -477,6 +477,8 @@ pub fn mock_mfa_check(method: crate::auth::MfaMethod, code: &str) -> Result<(), 
     }
 }
 
+const DEMO_TAG_GUILD: Id = Id(100);
+
 impl Backend for MockBackend {
     fn load_settings(&self) -> BoxFuture<crate::ui::settings::SyncedSettings> {
         let settings = self.inner.lock().unwrap().settings.clone();
@@ -1018,8 +1020,16 @@ impl Backend for MockBackend {
         (crate::mock_stage::enabled() && self.stage_channel() == Some(channel)).then_some(crate::ui::stage::STAGE_MODERATOR | crate::ui::stage::REQUEST_TO_SPEAK)
     }
 
-    fn guild_features(&self, _guild: Id) -> Vec<String> {
-        vec!["COMMUNITY".into()]
+    fn guild_features(&self, guild: Id) -> Vec<String> {
+        let mut f = vec!["COMMUNITY".to_owned()];
+        if guild == DEMO_TAG_GUILD {
+            f.push("GUILD_TAGS".into());
+        }
+        f
+    }
+
+    fn guild_tag(&self, guild: Id) -> Option<(String, Option<String>)> {
+        (guild == DEMO_TAG_GUILD).then(|| ("PHX".to_owned(), None))
     }
 
     fn load_pins(&self, channel: Id) -> BoxFuture<Vec<Message>> {
