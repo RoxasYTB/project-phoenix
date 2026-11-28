@@ -116,8 +116,8 @@ fn main() -> anyhow::Result<()> {
                             _ => 7,
                         };
                         let r = Reaction {
-                            emoji: if custom { "<:phoenix:1374100000000000042>".into() } else { "😅".into() },
-                            emoji_id: custom.then_some(Id(1374100000000000042)),
+                            emoji: if custom { "<:p_:1402584690866524232>".into() } else { "😅".into() },
+                            emoji_id: custom.then_some(Id(1402584690866524232)),
                             count: if burst { 0 } else { count },
                             burst_count: if burst { count } else { 0 },
                             ..Default::default()
@@ -132,7 +132,7 @@ fn main() -> anyhow::Result<()> {
                             phoenix_app::ui::states::set_hover(key, true);
                             phoenix_app::ui::chat::burst_tip::load_names(app, ch, id, &r, burst, cx);
                             if variant == "custom-open" {
-                                phoenix_app::ui::chat::reaction_emoji::expand(key, app, 1374100000000000042, cx);
+                                phoenix_app::ui::chat::reaction_emoji::expand(key, app, 1402584690866524232, cx);
                             }
                         }
                     }
