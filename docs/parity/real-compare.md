@@ -975,6 +975,8 @@ Client on Friends (`/channels/@me`, the only ack-free route it was on), emulated
 and 640×350 at dpr 3 (200 %), then `clearDeviceMetricsOverride`. Phoenix `real_shots PHX_W/PHX_H/PHX_SCALE` same sizes.
 The offscreen buffer of `real_shots` stops at 2× the CSS size (1706×934 and 1280×700 instead of 1919×1051 and 1920×1050),
 so only the left part is compared, on the client shot cropped to the same box.
+Fixed in GPUI rev 869f38c1 (`gpui-headless-scale`): the headless test window kept a scale factor of 2.0 and sized its
+render target from it; `Window::set_scale_factor` now updates it, so `PHX_SCALE=2.25` / `3` captures come out whole.
 
 | View | Zoom | Overall | Notes |
 |---|---|---|---|
@@ -984,4 +986,13 @@ so only the left part is compared, on the client shot cropped to the same box.
 
 Fixed: in a friend row the display name did not shrink (no `min-width: 0`), so a long name pushed the server tag out of
 the row. Client CSS `.userInfo_jPuNMC{display:flex;min-width:0}`, `.username_jPuNMC{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}`:
-the name ellipsizes (« ! Peдyaн Ịاlاه 마다… ») and the tag stays (`home/friends.rs`, 53bddccf). ❌ still open: after the merge a ~27 CSS px gap sits between the ellipsis and the tag (client ~5 px); the ellipsized name box keeps more width than its text. Rail badges at 150 / 200 % now compared: ✅.
+the name ellipsizes (« ! Peдyaн Ịاlاه 마다… ») and the tag stays (`home/friends.rs`, 53bddccf). Gap before the tag (28/11 18:30): the name box is the same in both clients (451 → 603 CSS px at 150 %, tag at 603 px), and the cut follows Chromium (last whole grapheme that fits, affix width included). The client keeps « 마다… », Phoenix « 마… » and leaves about one Hangul advance (~16 CSS px) free: the fallback glyphs of the name (Arabic « ارامه », Hangul) are drawn semibold and wider in Phoenix, regular in the client, so « 다 » no longer fits. ❌ open as a fallback-weight issue (`fonts.md`), not a flex or ellipsis bug. Rail badges at 150 / 200 % now compared: ✅.
+
+### Views with no score yet (28/11 18:30)
+
+Never compared against the client in this file: login and MFA (`login.md`, not reachable on the logged-in client),
+message and user context menus (`context-menus.md`), image viewer, server onboarding, Add Friend tab, Keybinds settings
+page (`shortcuts.md`), voice messages (`voice-messages.md`), report modal (`report.md`), the Quest progress bar above the
+account panel (« Quête terminée à 84 % », `containerQuestBarVisible_g6VwXp`, shown on Friends only, not implemented).
+Ack-free in the client: Add Friend, Keybinds, context menus on a Friends row, Quest bar. The client sat on the user's own
+guild route during this pass, so nothing was navigated and these stay to do; Discover was already scored in sweeps 3 and 4.
