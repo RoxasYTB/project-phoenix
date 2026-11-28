@@ -248,9 +248,9 @@ pub(crate) fn fields(b: &[u8]) -> Vec<(u32, u8, u64, &[u8])> {
             }
             2 => {
                 let Some(n) = read_varint(b, &mut i) else { break };
-                let Some(d) = b.get(i..i + n as usize) else { break };
+                let Some(d) = usize::try_from(n).ok().and_then(|n| b.get(i..i.checked_add(n)?)) else { break };
                 out.push((tag, 2, 0, d));
-                i += n as usize;
+                i += d.len();
             }
             _ => break,
         }
@@ -1005,6 +1005,15 @@ mod tests {
         assert_eq!(proto_read(list[0], &[3], true, true), Some(ProtoValue::Str("Jeux".into())));
         assert_eq!(proto_read(list[0], &[4], true, false), Some(ProtoValue::Int(0x5865F2)));
         assert!(proto_read(list[1], &[3], true, true).is_none());
+    }
+
+    #[test]
+    fn huge_length_prefix_stops_parsing() {
+        let mut b = vec![0x0a];
+        b.extend_from_slice(&[0xff; 9]);
+        b.push(0x01);
+        assert!(fields(&b).is_empty());
+        assert_eq!(fields(&[0x08, 0x01, 0x12, 0x80, 0x80, 0x80, 0x80, 0x10]).len(), 1);
     }
 
     #[test]
