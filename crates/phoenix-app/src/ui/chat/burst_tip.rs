@@ -262,8 +262,8 @@ pub fn layer(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message, r: &R
     let tip = tip_key(pill);
     let shown = SHOWN.get() == Some(pill);
     if !visible(crate::ui::states::state(pill), crate::ui::states::state(tip), shown, show_after(burst)) {
-        super::reaction_emoji::collapse(pill);
         if shown {
+            super::reaction_emoji::collapse(pill);
             SHOWN.set(None);
         }
         return None;
